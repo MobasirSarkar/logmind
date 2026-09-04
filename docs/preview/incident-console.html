@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LogMind — Incident & Telemetry Console</title>
+  <style>
+    :root {
+      --bg: #ffffff;
+      --bg-subtle: #f6f8fa;
+      --card-bg: #ffffff;
+      --border: #d0d7de;
+      --border-muted: #e1e4e8;
+      --text-main: #1f2328;
+      --text-muted: #656d76;
+      --danger: #cf222e;
+      --danger-bg: #ffebe9;
+      --danger-border: #ff8182;
+      --warning: #9a6700;
+      --warning-bg: #fff8c5;
+      --warning-border: #d4a72c;
+      --success: #1a7f37;
+      --success-bg: #dafbe1;
+      --success-border: #4ac26b;
+      --accent: #0969da;
+      --accent-bg: #ddf4ff;
+      --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background-color: var(--bg-subtle);
+      color: var(--text-main);
+      font-family: var(--font-sans);
+      font-size: 14px;
+      line-height: 1.5;
+      padding: 24px;
+    }
+
+    .container {
+      max-width: 1280px;
+      margin: 0 auto;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 20px;
+      background-color: var(--bg);
+      padding: 16px 20px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo {
+      background-color: var(--text-main);
+      color: #ffffff;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-weight: 700;
+      font-size: 13px;
+      letter-spacing: 0.5px;
+    }
+
+    .nav-tabs {
+      display: flex;
+      gap: 6px;
+    }
+
+    .nav-btn {
+      background: none;
+      border: 1px solid transparent;
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+
+    .nav-btn:hover {
+      background-color: var(--bg-subtle);
+      color: var(--text-main);
+    }
+
+    .nav-btn.active {
+      background-color: var(--bg-subtle);
+      color: var(--text-main);
+      border-color: var(--border);
+      font-weight: 600;
+    }
+
+    .view-section {
+      display: none;
+    }
+
+    .view-section.active {
+      display: block;
+    }
+
+    /* Common Card / Panel */
+    .panel {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 12px;
+      margin-bottom: 16px;
+      border-bottom: 1px solid var(--border-muted);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .badge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      display: inline-block;
+    }
+
+    .badge-critical { background: var(--danger-bg); color: var(--danger); border: 1px solid var(--danger-border); }
+    .badge-warning { background: var(--warning-bg); color: var(--warning); border: 1px solid var(--warning-border); }
+    .badge-success { background: var(--success-bg); color: var(--success); border: 1px solid var(--success-border); }
+    .badge-neutral { background: var(--bg-subtle); color: var(--text-muted); border: 1px solid var(--border); }
+
+    .btn {
+      background-color: #f6f8fa;
+      color: var(--text-main);
+      border: 1px solid var(--border);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    .btn:hover { background-color: #f3f4f6; border-color: #b1b8be; }
+    .btn-primary { background-color: var(--text-main); color: #ffffff; border-color: var(--text-main); }
+    .btn-primary:hover { background-color: #24292f; }
+
+    /* --- SECTION 1: INCIDENTS VIEW --- */
+    .incident-banner {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--danger);
+      border-radius: 6px;
+      padding: 18px 20px;
+      margin-bottom: 20px;
+    }
+
+    .incident-meta {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .incident-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text-main);
+      margin-bottom: 6px;
+    }
+
+    .incidents-grid {
+      display: grid;
+      grid-template-columns: 1fr 420px;
+      gap: 20px;
+    }
+
+    .timeline {
+      position: relative;
+      padding-left: 20px;
+    }
+
+    .timeline::before {
+      content: '';
+      position: absolute;
+      left: 6px;
+      top: 6px;
+      bottom: 6px;
+      width: 2px;
+      background-color: var(--border);
+    }
+
+    .timeline-item {
+      position: relative;
+      margin-bottom: 18px;
+    }
+
+    .timeline-dot {
+      position: absolute;
+      left: -20px;
+      top: 5px;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background-color: var(--border);
+      border: 2px solid #ffffff;
+    }
+
+    .timeline-dot.root { background-color: var(--danger); }
+    .timeline-dot.cascade { background-color: var(--warning); }
+
+    .event-card {
+      background-color: var(--bg-subtle);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+
+    .ai-box {
+      background-color: var(--bg-subtle);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 14px;
+      margin-bottom: 16px;
+    }
+
+    .evidence-item {
+      background-color: var(--bg-subtle);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 12px;
+      margin-bottom: 8px;
+      font-size: 12px;
+    }
+
+    /* --- SECTION 2: LOG EXPLORER --- */
+    .search-bar-row {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .search-input {
+      flex: 1;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 13px;
+      font-family: var(--font-mono);
+      outline: none;
+    }
+
+    .search-input:focus {
+      border-color: var(--accent);
+    }
+
+    .mode-select {
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 13px;
+      background: #ffffff;
+      color: var(--text-main);
+    }
+
+    .logs-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+
+    .logs-table th {
+      background-color: var(--bg-subtle);
+      color: var(--text-muted);
+      text-align: left;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+      font-weight: 600;
+    }
+
+    .logs-table td {
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border-muted);
+      vertical-align: top;
+    }
+
+    .logs-table tr:hover {
+      background-color: #fbfcfd;
+    }
+
+    /* --- SECTION 3: SERVICE TOPOLOGY --- */
+    .topology-container {
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      padding: 40px 20px;
+      background-color: var(--bg-subtle);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+    }
+
+    .service-node {
+      background-color: #ffffff;
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      padding: 16px 20px;
+      width: 180px;
+      text-align: center;
+    }
+
+    .service-node.healthy { border-color: var(--success); }
+    .service-node.failing { border-color: var(--danger); background-color: var(--danger-bg); }
+    .service-node.degraded { border-color: var(--warning); background-color: var(--warning-bg); }
+
+    .node-title {
+      font-weight: 600;
+      font-size: 14px;
+      margin-bottom: 6px;
+    }
+
+    .node-status {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .arrow {
+      font-size: 20px;
+      color: var(--text-muted);
+      font-weight: 700;
+    }
+
+    /* --- SECTION 4: DEAD-LETTER QUEUE (DLQ) --- */
+    .dlq-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    .dlq-table th {
+      background-color: var(--bg-subtle);
+      color: var(--text-muted);
+      text-align: left;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      font-weight: 600;
+    }
+
+    .dlq-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border-muted);
+    }
+
+    /* Toast notification */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background-color: var(--text-main);
+      color: #ffffff;
+      padding: 10px 18px;
+      border-radius: 6px;
+      font-size: 13px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <!-- Top Navigation Header -->
+  <header>
+    <div class="brand">
+      <span class="logo">LOGMIND</span>
+      <span style="color: var(--text-muted);">/</span>
+      <span style="font-weight: 600; font-size: 14px;">Incident Investigation Console</span>
+    </div>
+    <nav class="nav-tabs">
+      <button class="nav-btn active" onclick="switchTab('incidents')">Incidents</button>
+      <button class="nav-btn" onclick="switchTab('logs')">Log Explorer</button>
+      <button class="nav-btn" onclick="switchTab('topology')">Service Topology</button>
+      <button class="nav-btn" onclick="switchTab('dlq')">Dead-Letter Queue (DLQ)</button>
+    </nav>
+  </header>
+
+  <!-- ==================== TAB 1: INCIDENTS ==================== -->
+  <div id="tab-incidents" class="view-section active">
+    <!-- Active Incident Banner -->
+    <div class="incident-banner">
+      <div class="incident-meta">
+        <span class="badge badge-critical">Critical</span>
+        <span class="badge badge-warning">Active Investigation</span>
+        <span style="font-family: var(--font-mono); color: var(--text-muted); font-size: 12px;">INC-8492</span>
+        <span style="color: var(--text-muted); font-size: 12px;">• Started 6 minutes ago</span>
+      </div>
+      <div class="incident-title">Payment gateway timeout causing cascading checkout failures in order-service</div>
+      <div style="font-size: 13px; color: var(--text-muted);">
+        Initial Source: <strong style="color: var(--text-main);">payment-service</strong> • Affected: <strong style="color: var(--text-main);">order-service, api-gateway</strong> • Traces: <strong style="color: var(--text-main);">142</strong>
+      </div>
+    </div>
+
+    <div class="incidents-grid">
+      <!-- Left Column: Correlated Incident Timeline -->
+      <div class="panel">
+        <div class="panel-header">
+          <span>Correlated Incident Timeline (Chronological Sequence)</span>
+          <span style="font-family: var(--font-mono); font-size: 11px;">10:31:02 UTC — 10:31:06 UTC</span>
+        </div>
+
+        <div class="timeline">
+          <!-- Step 1: Initial Trigger -->
+          <div class="timeline-item">
+            <div class="timeline-dot root"></div>
+            <div style="margin-bottom: 4px;">
+              <span style="font-family: var(--font-mono); font-weight: 600; color: var(--danger);">10:31:05.421</span>
+              <strong style="margin-left: 8px;">payment-service</strong>
+              <span class="badge badge-critical" style="margin-left: 8px; font-size: 10px;">Initial Trigger</span>
+            </div>
+            <div class="event-card" style="border-left: 3px solid var(--danger);">
+              <div style="color: var(--danger); font-weight: 600;">GatewayTimeoutException: Stripe upstream payment authorization timed out after 8000ms</div>
+              <div style="color: var(--text-muted); margin-top: 4px;">HTTP 504 • trace_id: 7f8a92e1 • span_id: span-03</div>
+            </div>
+          </div>
+
+          <!-- Step 2: Cascade into Order Service -->
+          <div class="timeline-item">
+            <div class="timeline-dot cascade"></div>
+            <div style="margin-bottom: 4px;">
+              <span style="font-family: var(--font-mono); font-weight: 600; color: var(--warning);">10:31:05.439 (+18ms)</span>
+              <strong style="margin-left: 8px;">order-service</strong>
+              <span class="badge badge-warning" style="margin-left: 8px; font-size: 10px;">Cascading Error</span>
+            </div>
+            <div class="event-card" style="border-left: 3px solid var(--warning);">
+              <div style="color: var(--warning); font-weight: 600;">OrderCreationFailure: Downstream payment service timed out for cart user_91024</div>
+              <div style="color: var(--text-muted); margin-top: 4px;">HTTP 502 • trace_id: 7f8a92e1 • span_id: span-02</div>
+            </div>
+          </div>
+
+          <!-- Step 3: Gateway Dropped -->
+          <div class="timeline-item">
+            <div class="timeline-dot cascade"></div>
+            <div style="margin-bottom: 4px;">
+              <span style="font-family: var(--font-mono); font-weight: 600; color: var(--warning);">10:31:05.442 (+3ms)</span>
+              <strong style="margin-left: 8px;">api-gateway</strong>
+              <span class="badge badge-warning" style="margin-left: 8px; font-size: 10px;">Gateway Drop</span>
+            </div>
+            <div class="event-card" style="border-left: 3px solid var(--warning);">
+              <div style="color: var(--warning); font-weight: 600;">BadGateway: Upstream order-service returned 502 for POST /v1/checkout</div>
+              <div style="color: var(--text-muted); margin-top: 4px;">HTTP 500 • trace_id: 7f8a92e1 • span_id: span-01</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column: AI Investigation Report -->
+      <div class="panel">
+        <div class="panel-header">
+          <span>AI Root-Cause Diagnosis</span>
+          <span class="badge badge-success">Confidence: 94%</span>
+        </div>
+
+        <div class="ai-box">
+          <div style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 600; margin-bottom: 4px;">Suspected Root Cause</div>
+          <div style="color: var(--danger); font-weight: 600; font-size: 14px; margin-bottom: 6px;">Stripe Gateway Timeout in payment-service</div>
+          <p style="font-size: 13px; color: var(--text-main);">
+            External provider latency increased to 8000ms. Downstream checkout transactions in order-service failed, causing an edge 500 spike at api-gateway.
+          </p>
+        </div>
+
+        <div style="font-size: 12px; font-weight: 600; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px;">
+          Supporting Evidence Citations
+        </div>
+
+        <div class="evidence-item">
+          <div style="font-family: var(--font-mono); color: var(--accent); font-weight: 600; font-size: 11px;">[LOG] log-810294 • payment-service</div>
+          <div>"GatewayTimeoutException: Stripe upstream timed out after 8000ms"</div>
+        </div>
+
+        <div class="evidence-item">
+          <div style="font-family: var(--font-mono); color: var(--accent); font-weight: 600; font-size: 11px;">[TRACE] trace-7f8a92 (3 Spans)</div>
+          <div>Gateway (500) ──► Order (502) ──► Payment (504 Timeout)</div>
+        </div>
+
+        <div class="evidence-item">
+          <div style="font-family: var(--font-mono); color: var(--accent); font-weight: 600; font-size: 11px;">[RUNBOOK] RB-PAY-04: Payment Timeout Mitigation</div>
+          <div>"If primary provider latency > 5000ms, enable backup payment processor."</div>
+        </div>
+
+        <div style="margin-top: 16px; display: flex; gap: 8px;">
+          <button class="btn btn-primary" style="flex: 1;" onclick="showToast('Incident acknowledged. Mitigation runbook linked.')">Acknowledge</button>
+          <button class="btn" style="flex: 1;" onclick="showToast('Re-running AI investigation...')">Re-run Analysis</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== TAB 2: LOG EXPLORER ==================== -->
+  <div id="tab-logs" class="view-section">
+    <div class="panel">
+      <div class="panel-header">
+        <span>Log Search & Telemetry Explorer</span>
+        <span>Elasticsearch 8.x + Local ONNX Vectors</span>
+      </div>
+
+      <!-- Search Controls -->
+      <div class="search-bar-row">
+        <input type="text" class="search-input" value="connection timeout payment" placeholder="Search logs (keywords, error messages, or concepts)...">
+        <select class="mode-select">
+          <option>Hybrid Search (BM25 + Dense Vector)</option>
+          <option>Exact Keyword (BM25 Only)</option>
+          <option>Semantic Concept (kNN Only)</option>
+        </select>
+        <button class="btn btn-primary" onclick="showToast('Search query executed: 42 logs found')">Search</button>
+      </div>
+
+      <!-- Results Table -->
+      <table class="logs-table">
+        <thead>
+          <tr>
+            <th style="width: 150px;">Timestamp</th>
+            <th style="width: 130px;">Service</th>
+            <th style="width: 80px;">Level</th>
+            <th style="width: 120px;">Trace ID</th>
+            <th>Normalized Message</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>10:31:05.421</td>
+            <td><strong>payment-service</strong></td>
+            <td><span class="badge badge-critical">ERROR</span></td>
+            <td>7f8a92e1</td>
+            <td>GatewayTimeoutException: Stripe upstream payment authorization timed out after 8000ms</td>
+          </tr>
+          <tr>
+            <td>10:31:05.439</td>
+            <td><strong>order-service</strong></td>
+            <td><span class="badge badge-warning">ERROR</span></td>
+            <td>7f8a92e1</td>
+            <td>OrderCreationFailure: Downstream payment service timed out for cart user_91024</td>
+          </tr>
+          <tr>
+            <td>10:31:05.442</td>
+            <td><strong>api-gateway</strong></td>
+            <td><span class="badge badge-warning">ERROR</span></td>
+            <td>7f8a92e1</td>
+            <td>BadGateway: Upstream order-service returned 502 for POST /v1/checkout</td>
+          </tr>
+          <tr>
+            <td>10:31:04.112</td>
+            <td><strong>auth-service</strong></td>
+            <td><span class="badge badge-success">INFO</span></td>
+            <td>7f8a92e1</td>
+            <td>Token validation successful for user_91024 [200 OK]</td>
+          </tr>
+          <tr>
+            <td>10:31:03.980</td>
+            <td><strong>api-gateway</strong></td>
+            <td><span class="badge badge-success">INFO</span></td>
+            <td>7f8a92e1</td>
+            <td>Incoming request POST /v1/checkout from 192.168.1.10</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ==================== TAB 3: SERVICE TOPOLOGY ==================== -->
+  <div id="tab-topology" class="view-section">
+    <div class="panel">
+      <div class="panel-header">
+        <span>Distributed Service Topology Graph</span>
+        <span class="badge badge-critical">1 Service Failing</span>
+      </div>
+
+      <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 24px;">
+        Active call chain dependency mapping. Failing downstream services propagate errors upward to the gateway.
+      </p>
+
+      <div class="topology-container">
+        <div class="service-node degraded">
+          <div class="node-title">api-gateway</div>
+          <div class="node-status" style="color: var(--warning);">5xx Spike</div>
+        </div>
+
+        <div class="arrow">──►</div>
+
+        <div class="service-node degraded">
+          <div class="node-title">order-service</div>
+          <div class="node-status" style="color: var(--warning);">Cascading 502</div>
+        </div>
+
+        <div class="arrow">──►</div>
+
+        <div class="service-node failing">
+          <div class="node-title">payment-service</div>
+          <div class="node-status" style="color: var(--danger);">Timeout Root</div>
+        </div>
+
+        <div class="arrow" style="color: #ccc;">──►</div>
+
+        <div class="service-node healthy">
+          <div class="node-title">notification-svc</div>
+          <div class="node-status" style="color: var(--success);">Healthy</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== TAB 4: DEAD-LETTER QUEUE (DLQ) ==================== -->
+  <div id="tab-dlq" class="view-section">
+    <div class="panel">
+      <div class="panel-header">
+        <span>Dead-Letter Queue (Human Inspection & Recovery)</span>
+        <span class="badge badge-warning">1 Pending Record</span>
+      </div>
+
+      <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">
+        Records that failed validation, ONNX embedding, or Elasticsearch indexing after 3 automatic retries. Inspect the raw payload and replay once resolved.
+      </p>
+
+      <table class="dlq-table">
+        <thead>
+          <tr>
+            <th>Failed At</th>
+            <th>Tenant ID</th>
+            <th>Error Stage</th>
+            <th>Failure Reason</th>
+            <th>Retries</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="dlq-tbody">
+          <tr id="dlq-row-1">
+            <td style="font-family: var(--font-mono);">10:32:01 UTC</td>
+            <td><strong>tenant-prod</strong></td>
+            <td><span class="badge badge-neutral">INDEXING</span></td>
+            <td style="color: var(--danger);">Elasticsearch mapper_parsing_exception: expected integer for 'metadata.retry_count'</td>
+            <td>3 / 3</td>
+            <td>
+              <button class="btn" onclick="inspectDLQ()">Inspect</button>
+              <button class="btn btn-primary" onclick="replayDLQ('dlq-row-1')">Replay</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Inspection Details Box -->
+      <div id="dlq-inspect-box" style="display: none; margin-top: 20px; padding: 16px; background: var(--bg-subtle); border: 1px solid var(--border); border-radius: 6px;">
+        <div style="font-weight: 600; font-size: 13px; margin-bottom: 8px;">Raw Failed Payload:</div>
+        <pre style="font-family: var(--font-mono); font-size: 12px; background: #ffffff; padding: 12px; border: 1px solid var(--border); border-radius: 4px; overflow-x: auto;">
+{
+  "timestamp": "2026-09-04T10:32:01.102Z",
+  "level": "ERROR",
+  "service": "payment-service",
+  "message": "Transaction failed",
+  "metadata": {
+    "retry_count": "invalid_string_not_number"
+  }
+}
+        </pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+  function switchTab(tabName) {
+    // Hide all sections
+    document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+
+    // Activate selected section
+    const targetSection = document.getElementById('tab-' + tabName);
+    if (targetSection) targetSection.classList.add('active');
+
+    // Activate button
+    event.target.classList.add('active');
+  }
+
+  function showToast(msg) {
+    const toast = document.getElementById('toast');
+    toast.textContent = msg;
+    toast.style.display = 'block';
+    setTimeout(() => { toast.style.display = 'none'; }, 2500);
+  }
+
+  function inspectDLQ() {
+    const box = document.getElementById('dlq-inspect-box');
+    box.style.display = box.style.display === 'none' ? 'block' : 'none';
+  }
+
+  function replayDLQ(rowId) {
+    const row = document.getElementById(rowId);
+    if (row) {
+      row.style.opacity = '0.5';
+      showToast('Record re-queued into logmind:queue:tenant-prod');
+      setTimeout(() => {
+        row.remove();
+        showToast('Record re-indexed successfully into Elasticsearch!');
+      }, 1200);
+    }
+  }
+</script>
+
+</body>
+</html>
