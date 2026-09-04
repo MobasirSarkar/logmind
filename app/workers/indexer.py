@@ -1,5 +1,5 @@
 import json
-from typing import Any, Dict, List, Tuple
+from typing import Any
 from app.models.log import DLQEntry, ErrorInfo, ErrorStage, HashType, LogFingerprint, LogLevel, LogRecord
 from app.services.elasticsearch import ElasticsearchService
 from app.services.embeddings import EmbeddingService
@@ -12,13 +12,13 @@ class IndexerWorker:
         self.es = es_service
         self.embeddings = embedding_service
 
-    async def run_cycle(self, tenant_id: str, batch_size: int = 500) -> Tuple[int, int]:
+    async def run_cycle(self, tenant_id: str, batch_size: int = 500) -> tuple[int, int]:
         raw_items = await self.queue.dequeue_batch(tenant_id, batch_size=batch_size)
         if not raw_items:
             return 0, 0
 
-        valid_records: List[LogRecord] = []
-        dlq_entries: List[DLQEntry] = []
+        valid_records: list[LogRecord] = []
+        dlq_entries: list[DLQEntry] = []
 
         for item in raw_items:
             try:

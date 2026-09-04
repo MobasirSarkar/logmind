@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 from elasticsearch import AsyncElasticsearch, helpers
 from app.models.log import LogRecord
 
@@ -9,10 +9,10 @@ class ElasticsearchService:
     def _index_name(self, tenant_id: str) -> str:
         return f"logmind-logs-{tenant_id}"
 
-    async def bulk_index(self, records: List[LogRecord]) -> int:
+    async def bulk_index(self, records: list[LogRecord]) -> int:
         if not records:
             return 0
-        actions: List[Dict[str, Any]] = []
+        actions: list[dict[str, Any]] = []
         for rec in records:
             action = {
                 "_index": self._index_name(rec.context.tenant_id),
@@ -28,9 +28,9 @@ class ElasticsearchService:
         tenant_id: str,
         query: str,
         mode: str = "hybrid",
-        query_vector: Optional[List[float]] = None,
+        query_vector: Optional[list[float]] = None,
         limit: int = 20,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         index = self._index_name(tenant_id)
         
         if mode == "exact":

@@ -2,7 +2,6 @@ import hashlib
 import ipaddress
 import uuid
 from datetime import datetime
-from typing import List
 from app.models.log import LogRecord
 
 def is_valid_uuid(token: str) -> bool:
@@ -59,7 +58,7 @@ def sanitize_token(token: str) -> str:
 
 def sanitize_error_message(message: str) -> str:
     tokens = message.split()
-    sanitized_tokens: List[str] = [sanitize_token(tok) for tok in tokens]
+    sanitized_tokens: list[str] = [sanitize_token(tok) for tok in tokens]
     return " ".join(sanitized_tokens)
 
 def generate_signature_hash(template: str) -> str:

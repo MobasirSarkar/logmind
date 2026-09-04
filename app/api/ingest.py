@@ -1,6 +1,6 @@
 import uuid
-from typing import Any, Dict, List
-from fastapi import APIRouter, Header, HTTPException, Response, status
+from typing import Any
+from fastapi import APIRouter, Header, HTTPException, status
 from pydantic import BaseModel, Field
 from app.config import settings
 from app.services.queue import QueueService
@@ -8,7 +8,7 @@ from app.services.queue import QueueService
 router = APIRouter(prefix="/api/v1/logs", tags=["Ingestion"])
 
 class LogBatchPayload(BaseModel):
-    logs: List[Dict[str, Any]] = Field(..., min_length=1, max_length=500)
+    logs: list[dict[str, Any]] = Field(..., min_length=1, max_length=500)
 
 _queue_service = None
 
@@ -23,7 +23,6 @@ def get_queue_service() -> QueueService:
 @router.post("/ingest", status_code=status.HTTP_202_ACCEPTED)
 async def ingest_logs(
     payload: LogBatchPayload,
-    response: Response,
     x_api_key: str = Header(..., alias="X-API-Key"),
     x_tenant_id: str = Header(..., alias="X-Tenant-ID"),
 ):

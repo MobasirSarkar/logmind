@@ -1,12 +1,12 @@
 from collections import OrderedDict
-from typing import List, Optional
+from typing import Optional
 from fastembed import TextEmbedding
 
 class EmbeddingService:
     def __init__(self, model_name: str = "BAAI/bge-small-en-v1.5", cache_capacity: int = 10000):
         self.model_name = model_name
         self.cache_capacity = cache_capacity
-        self._cache: OrderedDict[str, List[float]] = OrderedDict()
+        self._cache: OrderedDict[str, list[float]] = OrderedDict()
         self._model: Optional[TextEmbedding] = None
 
     def _get_model(self) -> TextEmbedding:
@@ -14,7 +14,7 @@ class EmbeddingService:
             self._model = TextEmbedding(model_name=self.model_name)
         return self._model
 
-    def get_or_compute_embedding(self, signature_hash: str, text: str) -> List[float]:
+    def get_or_compute_embedding(self, signature_hash: str, text: str) -> list[float]:
         # Cache hit
         if signature_hash in self._cache:
             self._cache.move_to_end(signature_hash)

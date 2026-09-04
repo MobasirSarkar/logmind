@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, Generic, List, Optional, TypeVar
+from typing import Any, Generic, Optional, TypeVar
 from pydantic import BaseModel, Field
 
 class LogLevel(str, Enum):
@@ -49,7 +49,7 @@ class LogFingerprint(BaseModel):
     content_hash: str
     signature_hash: Optional[str] = None
     hash_type: HashType = HashType.SHA256
-    embedding: Optional[List[float]] = None
+    embedding: Optional[list[float]] = None
     model_name: Optional[str] = "BAAI/bge-small-en-v1.5"
 
 class LogRecord(BaseModel, Generic[TMetadata]):

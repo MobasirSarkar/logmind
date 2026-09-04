@@ -27,3 +27,13 @@ async def test_dlq_list_and_replay():
             replay_res = await ac.post("/api/v1/dlq/dlq-123/replay", headers={"X-Tenant-ID": "t-1", "X-API-Key": "lmd_dev_key"})
             assert replay_res.status_code == 200
             assert replay_res.json()["status"] == "replayed"
+
+            # 3. Get single DLQ entry
+            get_res = await ac.get("/api/v1/dlq/dlq-123", headers={"X-Tenant-ID": "t-1", "X-API-Key": "lmd_dev_key"})
+            assert get_res.status_code == 200
+            assert get_res.json()["dlq_id"] == "dlq-123"
+
+            # 4. Discard DLQ entry
+            del_res = await ac.delete("/api/v1/dlq/dlq-123", headers={"X-Tenant-ID": "t-1", "X-API-Key": "lmd_dev_key"})
+            assert del_res.status_code == 200
+            assert del_res.json()["status"] == "discarded"

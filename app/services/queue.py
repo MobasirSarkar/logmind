@@ -1,5 +1,5 @@
 import json
-from typing import Any, Dict, List
+from typing import Any
 import redis.asyncio as aioredis
 
 class QueueService:
@@ -17,15 +17,15 @@ class QueueService:
         depth = await self.get_queue_depth(tenant_id)
         return depth >= self.max_depth
 
-    async def enqueue_batch(self, tenant_id: str, logs: List[Dict[str, Any]]) -> int:
+    async def enqueue_batch(self, tenant_id: str, logs: list[dict[str, Any]]) -> int:
         key = self._queue_key(tenant_id)
         serialized = [json.dumps(log) for log in logs]
         await self.redis.lpush(key, *serialized)
         return len(logs)
 
-    async def dequeue_batch(self, tenant_id: str, batch_size: int = 500) -> List[Dict[str, Any]]:
+    async def dequeue_batch(self, tenant_id: str, batch_size: int = 500) -> list[dict[str, Any]]:
         key = self._queue_key(tenant_id)
-        items: List[Dict[str, Any]] = []
+        items: list[dict[str, Any]] = []
         for _ in range(batch_size):
             raw = await self.redis.rpop(key)
             if raw is None:
