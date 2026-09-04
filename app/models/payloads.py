@@ -1,6 +1,9 @@
 from typing import Any
+
 from pydantic import BaseModel
+
 from app.models.search import SearchHit
+
 
 class DLQActionData(BaseModel):
     status: str
