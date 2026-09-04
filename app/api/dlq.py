@@ -1,21 +1,20 @@
 import json
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, HTTPException
 
-from app.api.deps import get_queue_service, verify_api_key
+from app.api.deps import ApiKeyDep, QueueDep, TenantIdHeader
 from app.constants import RedisKeyPrefix
 from app.models.payloads import DLQActionData, DLQListData
 from app.models.response import ApiResponse
-from app.services.queue import QueueService
 
 router = APIRouter(prefix="/api/v1/dlq", tags=["Dead-Letter Queue"])
 
 @router.get("", response_model=ApiResponse[DLQListData])
 async def list_dlq(
-    x_tenant_id: str = Header(..., alias="X-Tenant-ID"),
-    _: str = Depends(verify_api_key),
-    queue: QueueService = Depends(get_queue_service),
+    x_tenant_id: TenantIdHeader,
+    _: ApiKeyDep,
+    queue: QueueDep,
 ):
     dlq_key = RedisKeyPrefix.DLQ.for_tenant(x_tenant_id)
     raw_list = await queue.redis.lrange(dlq_key, 0, 100)
@@ -30,9 +29,9 @@ async def list_dlq(
 @router.get("/{dlq_id}", response_model=ApiResponse[dict[str, Any]])
 async def get_dlq_entry(
     dlq_id: str,
-    x_tenant_id: str = Header(..., alias="X-Tenant-ID"),
-    _: str = Depends(verify_api_key),
-    queue: QueueService = Depends(get_queue_service),
+    x_tenant_id: TenantIdHeader,
+    _: ApiKeyDep,
+    queue: QueueDep,
 ):
     dlq_key = RedisKeyPrefix.DLQ.for_tenant(x_tenant_id)
     raw_list = await queue.redis.lrange(dlq_key, 0, 500)
@@ -48,9 +47,9 @@ async def get_dlq_entry(
 @router.post("/{dlq_id}/replay", response_model=ApiResponse[DLQActionData])
 async def replay_dlq_entry(
     dlq_id: str,
-    x_tenant_id: str = Header(..., alias="X-Tenant-ID"),
-    _: str = Depends(verify_api_key),
-    queue: QueueService = Depends(get_queue_service),
+    x_tenant_id: TenantIdHeader,
+    _: ApiKeyDep,
+    queue: QueueDep,
 ):
     dlq_key = RedisKeyPrefix.DLQ.for_tenant(x_tenant_id)
     raw_list = await queue.redis.lrange(dlq_key, 0, 500)
@@ -78,9 +77,9 @@ async def replay_dlq_entry(
 @router.delete("/{dlq_id}", response_model=ApiResponse[DLQActionData])
 async def discard_dlq_entry(
     dlq_id: str,
-    x_tenant_id: str = Header(..., alias="X-Tenant-ID"),
-    _: str = Depends(verify_api_key),
-    queue: QueueService = Depends(get_queue_service),
+    x_tenant_id: TenantIdHeader,
+    _: ApiKeyDep,
+    queue: QueueDep,
 ):
     dlq_key = RedisKeyPrefix.DLQ.for_tenant(x_tenant_id)
     raw_list = await queue.redis.lrange(dlq_key, 0, 500)

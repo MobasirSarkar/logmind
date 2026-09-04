@@ -1,7 +1,8 @@
+from typing import Annotated
 
 import redis.asyncio as aioredis
 from elasticsearch import AsyncElasticsearch
-from fastapi import Header, HTTPException
+from fastapi import Depends, Header, HTTPException
 
 from app.config import settings
 from app.services.elasticsearch import ElasticsearchService
@@ -12,7 +13,11 @@ _queue_service: QueueService | None = None
 _es_service: ElasticsearchService | None = None
 _embedding_service: EmbeddingService | None = None
 
-def verify_api_key(x_api_key: str = Header(..., alias="X-API-Key")) -> str:
+# Module-level header aliases
+ApiKeyHeader = Annotated[str, Header(alias="X-API-Key")]
+TenantIdHeader = Annotated[str, Header(alias="X-Tenant-ID")]
+
+def verify_api_key(x_api_key: ApiKeyHeader) -> str:
     if x_api_key != settings.API_KEY:
         raise HTTPException(status_code=401, detail="Invalid API Key")
     return x_api_key
@@ -36,3 +41,9 @@ def get_embedding_service() -> EmbeddingService:
     if _embedding_service is None:
         _embedding_service = EmbeddingService(settings.EMBEDDING_MODEL_NAME)
     return _embedding_service
+
+# Module-level dependency aliases satisfying B008
+QueueDep = Annotated[QueueService, Depends(get_queue_service)]
+EsDep = Annotated[ElasticsearchService, Depends(get_es_service)]
+EmbeddingDep = Annotated[EmbeddingService, Depends(get_embedding_service)]
+ApiKeyDep = Annotated[str, Depends(verify_api_key)]

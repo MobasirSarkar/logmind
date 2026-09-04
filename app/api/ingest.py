@@ -1,13 +1,12 @@
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
-from app.api.deps import get_queue_service, verify_api_key
+from app.api.deps import ApiKeyDep, QueueDep, TenantIdHeader
 from app.models.payloads import LogBatchResponseData
 from app.models.response import ApiResponse
-from app.services.queue import QueueService
 
 router = APIRouter(prefix="/api/v1/logs", tags=["Ingestion"])
 
@@ -17,9 +16,9 @@ class LogBatchPayload(BaseModel):
 @router.post("/ingest", status_code=status.HTTP_202_ACCEPTED, response_model=ApiResponse[LogBatchResponseData])
 async def ingest_logs(
     payload: LogBatchPayload,
-    x_tenant_id: str = Header(..., alias="X-Tenant-ID"),
-    _: str = Depends(verify_api_key),
-    queue_service: QueueService = Depends(get_queue_service),
+    x_tenant_id: TenantIdHeader,
+    _: ApiKeyDep,
+    queue_service: QueueDep,
 ):
     if await queue_service.is_queue_saturated(x_tenant_id):
         raise HTTPException(

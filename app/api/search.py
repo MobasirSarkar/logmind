@@ -1,12 +1,10 @@
 from enum import Enum
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
-from app.api.deps import get_embedding_service, get_es_service, verify_api_key
+from app.api.deps import ApiKeyDep, EmbeddingDep, EsDep, TenantIdHeader
 from app.models.payloads import SearchResponseData
 from app.models.response import ApiResponse
-from app.services.elasticsearch import ElasticsearchService
-from app.services.embeddings import EmbeddingService
 from app.services.normalizer import generate_signature_hash
 
 router = APIRouter(prefix="/api/v1/logs", tags=["Search"])
@@ -24,10 +22,10 @@ class SearchRequest(BaseModel):
 @router.post("/search", response_model=ApiResponse[SearchResponseData])
 async def search_logs(
     req: SearchRequest,
-    x_tenant_id: str = Header(..., alias="X-Tenant-ID"),
-    _: str = Depends(verify_api_key),
-    es: ElasticsearchService = Depends(get_es_service),
-    embed: EmbeddingService = Depends(get_embedding_service),
+    x_tenant_id: TenantIdHeader,
+    _: ApiKeyDep,
+    es: EsDep,
+    embed: EmbeddingDep,
 ):
     vector = None
     if req.mode in (SearchMode.SEMANTIC, SearchMode.HYBRID):
