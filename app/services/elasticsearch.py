@@ -1,4 +1,4 @@
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from elasticsearch import AsyncElasticsearch, helpers
 from app.models.log import LogRecord
 
@@ -22,3 +22,56 @@ class ElasticsearchService:
             actions.append(action)
         success_count, _ = await helpers.async_bulk(self.es, actions)
         return success_count
+
+    async def search(
+        self,
+        tenant_id: str,
+        query: str,
+        mode: str = "hybrid",
+        query_vector: Optional[List[float]] = None,
+        limit: int = 20,
+    ) -> Dict[str, Any]:
+        index = self._index_name(tenant_id)
+        
+        if mode == "exact":
+            body = {
+                "query": {
+                    "multi_match": {
+                        "query": query,
+                        "fields": ["message", "error.error_message", "error.error_type"]
+                    }
+                },
+                "size": limit
+            }
+            return await self.es.search(index=index, body=body)
+
+        if mode == "semantic" and query_vector:
+            body = {
+                "knn": {
+                    "field": "fingerprint.embedding",
+                    "query_vector": query_vector,
+                    "k": limit,
+                    "num_candidates": limit * 5
+                },
+                "size": limit
+            }
+            return await self.es.search(index=index, body=body)
+
+        # Hybrid Search (RRF)
+        body = {
+            "query": {
+                "multi_match": {
+                    "query": query,
+                    "fields": ["message", "error.error_message", "error.error_type"]
+                }
+            },
+            "knn": {
+                "field": "fingerprint.embedding",
+                "query_vector": query_vector or ([0.0] * 384),
+                "k": limit,
+                "num_candidates": limit * 5
+            },
+            "rank": {"rrf": {"window_size": 50, "rank_constant": 60}},
+            "size": limit
+        }
+        return await self.es.search(index=index, body=body)
