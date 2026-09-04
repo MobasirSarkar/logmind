@@ -1,13 +1,14 @@
 from typing import Any, Optional, cast
 from elasticsearch import AsyncElasticsearch, helpers
 from app.models.log import LogRecord
+from app.constants import ESIndexPrefix
 
 class ElasticsearchService:
     def __init__(self, es_client: AsyncElasticsearch):
         self.es = es_client
 
     def _index_name(self, tenant_id: str) -> str:
-        return f"logmind-logs-{tenant_id}"
+        return ESIndexPrefix.LOGS.for_tenant(tenant_id)
 
     async def bulk_index(self, records: list[LogRecord]) -> int:
         if not records:

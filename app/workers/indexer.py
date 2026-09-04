@@ -5,6 +5,7 @@ from app.services.elasticsearch import ElasticsearchService
 from app.services.embeddings import EmbeddingService
 from app.services.normalizer import generate_content_hash, generate_signature_hash, sanitize_error_message
 from app.services.queue import QueueService
+from app.constants import RedisKeyPrefix
 
 class IndexerWorker:
     def __init__(self, queue_service: QueueService, es_service: ElasticsearchService, embedding_service: EmbeddingService):
@@ -60,7 +61,7 @@ class IndexerWorker:
 
         # Store DLQ in Redis list
         if dlq_entries:
-            dlq_key = f"logmind:dlq:{tenant_id}"
+            dlq_key = RedisKeyPrefix.DLQ.for_tenant(tenant_id)
             await self.queue.redis.lpush(dlq_key, *[json.dumps(d.model_dump(mode="json")) for d in dlq_entries])
 
         return indexed, len(dlq_entries)

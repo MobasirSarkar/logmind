@@ -1,6 +1,7 @@
 import json
 from typing import Any
 import redis.asyncio as aioredis
+from app.constants import RedisKeyPrefix
 
 class QueueService:
     def __init__(self, redis_client: aioredis.Redis, max_depth: int = 50000):
@@ -8,7 +9,7 @@ class QueueService:
         self.max_depth = max_depth
 
     def _queue_key(self, tenant_id: str) -> str:
-        return f"logmind:queue:{tenant_id}"
+        return RedisKeyPrefix.QUEUE.for_tenant(tenant_id)
 
     async def get_queue_depth(self, tenant_id: str) -> int:
         return await self.redis.llen(self._queue_key(tenant_id))

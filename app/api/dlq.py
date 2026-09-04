@@ -3,6 +3,7 @@ from typing import Any
 from fastapi import APIRouter, Header, HTTPException
 from app.api.ingest import get_queue_service
 from app.config import settings
+from app.constants import RedisKeyPrefix
 
 router = APIRouter(prefix="/api/v1/dlq", tags=["Dead-Letter Queue"])
 
@@ -17,7 +18,8 @@ async def list_dlq(
 ):
     _verify_auth(x_api_key)
     queue = get_queue_service()
-    raw_list = await queue.redis.lrange(f"logmind:dlq:{x_tenant_id}", 0, 100)
+    dlq_key = RedisKeyPrefix.DLQ.for_tenant(x_tenant_id)
+    raw_list = await queue.redis.lrange(dlq_key, 0, 100)
     entries: list[dict[str, Any]] = []
     for item in raw_list:
         try:
@@ -34,7 +36,8 @@ async def get_dlq_entry(
 ):
     _verify_auth(x_api_key)
     queue = get_queue_service()
-    raw_list = await queue.redis.lrange(f"logmind:dlq:{x_tenant_id}", 0, 500)
+    dlq_key = RedisKeyPrefix.DLQ.for_tenant(x_tenant_id)
+    raw_list = await queue.redis.lrange(dlq_key, 0, 500)
     for raw in raw_list:
         try:
             parsed = json.loads(raw)
@@ -52,7 +55,7 @@ async def replay_dlq_entry(
 ):
     _verify_auth(x_api_key)
     queue = get_queue_service()
-    dlq_key = f"logmind:dlq:{x_tenant_id}"
+    dlq_key = RedisKeyPrefix.DLQ.for_tenant(x_tenant_id)
     raw_list = await queue.redis.lrange(dlq_key, 0, 500)
 
     target_raw = None
@@ -85,7 +88,7 @@ async def discard_dlq_entry(
 ):
     _verify_auth(x_api_key)
     queue = get_queue_service()
-    dlq_key = f"logmind:dlq:{x_tenant_id}"
+    dlq_key = RedisKeyPrefix.DLQ.for_tenant(x_tenant_id)
     raw_list = await queue.redis.lrange(dlq_key, 0, 500)
 
     for raw in raw_list:
