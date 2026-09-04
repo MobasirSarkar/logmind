@@ -1,5 +1,6 @@
 from enum import Enum
 
+
 class RedisKeyPrefix(str, Enum):
     QUEUE = "logmind:queue"
     DLQ = "logmind:dlq"

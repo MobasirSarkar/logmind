@@ -1,9 +1,10 @@
 from enum import Enum
-
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Depends, Header
 from pydantic import BaseModel, Field
 
-from app.config import settings
+from app.api.deps import get_embedding_service, get_es_service, verify_api_key
+from app.models.payloads import SearchResponseData
+from app.models.response import ApiResponse
 from app.services.elasticsearch import ElasticsearchService
 from app.services.embeddings import EmbeddingService
 from app.services.normalizer import generate_signature_hash
@@ -20,35 +21,14 @@ class SearchRequest(BaseModel):
     mode: SearchMode = SearchMode.HYBRID
     limit: int = Field(default=20, ge=1, le=100)
 
-_es_service = None
-_embedding_service = None
-
-def get_es_service() -> ElasticsearchService:
-    global _es_service
-    if _es_service is None:
-        from elasticsearch import AsyncElasticsearch
-        client = AsyncElasticsearch(settings.ELASTICSEARCH_URL)
-        _es_service = ElasticsearchService(client)
-    return _es_service
-
-def get_embedding_service() -> EmbeddingService:
-    global _embedding_service
-    if _embedding_service is None:
-        _embedding_service = EmbeddingService(settings.EMBEDDING_MODEL_NAME)
-    return _embedding_service
-
-@router.post("/search")
+@router.post("/search", response_model=ApiResponse[SearchResponseData])
 async def search_logs(
     req: SearchRequest,
     x_tenant_id: str = Header(..., alias="X-Tenant-ID"),
-    x_api_key: str = Header(..., alias="X-API-Key"),
+    _: str = Depends(verify_api_key),
+    es: ElasticsearchService = Depends(get_es_service),
+    embed: EmbeddingService = Depends(get_embedding_service),
 ):
-    if x_api_key != settings.API_KEY:
-        raise HTTPException(status_code=401, detail="Invalid API Key")
-
-    es = get_es_service()
-    embed = get_embedding_service()
-
     vector = None
     if req.mode in (SearchMode.SEMANTIC, SearchMode.HYBRID):
         s_hash = generate_signature_hash(req.query)
@@ -61,7 +41,9 @@ async def search_logs(
         query_vector=vector,
         limit=req.limit,
     )
-    return {
-        "total": res.get("hits", {}).get("total", {}).get("value", 0),
-        "hits": res.get("hits", {}).get("hits", []),
-    }
+    return ApiResponse.ok(
+        SearchResponseData(
+            total=res.get("hits", {}).get("total", {}).get("value", 0),
+            hits=res.get("hits", {}).get("hits", []),
+        )
+    )
