@@ -18,3 +18,16 @@ services:
     ports:
       - "9200:9200"
     restart: unless-stopped
+
+  api:
+    build: .
+    container_name: logmind-api
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+    depends_on:
+      - redis
+      - elasticsearch
+    restart: unless-stopped
