@@ -1,0 +1,34 @@
+import json
+from typing import Any, Dict, List
+import redis.asyncio as aioredis
+
+class QueueService:
+    def __init__(self, redis_client: aioredis.Redis, max_depth: int = 50000):
+        self.redis = redis_client
+        self.max_depth = max_depth
+
+    def _queue_key(self, tenant_id: str) -> str:
+        return f"logmind:queue:{tenant_id}"
+
+    async def get_queue_depth(self, tenant_id: str) -> int:
+        return await self.redis.llen(self._queue_key(tenant_id))
+
+    async def is_queue_saturated(self, tenant_id: str) -> bool:
+        depth = await self.get_queue_depth(tenant_id)
+        return depth >= self.max_depth
+
+    async def enqueue_batch(self, tenant_id: str, logs: List[Dict[str, Any]]) -> int:
+        key = self._queue_key(tenant_id)
+        serialized = [json.dumps(log) for log in logs]
+        await self.redis.lpush(key, *serialized)
+        return len(logs)
+
+    async def dequeue_batch(self, tenant_id: str, batch_size: int = 500) -> List[Dict[str, Any]]:
+        key = self._queue_key(tenant_id)
+        items: List[Dict[str, Any]] = []
+        for _ in range(batch_size):
+            raw = await self.redis.rpop(key)
+            if raw is None:
+                break
+            items.append(json.loads(raw))
+        return items
