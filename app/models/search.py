@@ -1,3 +1,4 @@
+from typing import Any, cast
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -23,4 +24,4 @@ class ESSearchResult[T](BaseModel):
 
     took: int | None = None
     timed_out: bool = False
-    hits: HitsMetadata[T] = Field(default_factory=HitsMetadata)
+    hits: HitsMetadata[T] = Field(default_factory=lambda: cast(Any, HitsMetadata()))
