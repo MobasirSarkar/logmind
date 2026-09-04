@@ -71,7 +71,8 @@ async def replay_dlq_entry(
         raise HTTPException(status_code=404, detail="DLQ entry not found")
 
     # Remove from DLQ
-    await queue.redis.lrem(dlq_key, 1, target_raw)
+    raw_str = target_raw.decode("utf-8") if isinstance(target_raw, bytes) else str(target_raw)
+    await queue.redis.lrem(dlq_key, 1, raw_str)
     # Re-inject payload into ingestion queue
     await queue.enqueue_batch(x_tenant_id, [payload_to_replay])
     return {"status": "replayed", "dlq_id": dlq_id}
@@ -91,7 +92,8 @@ async def discard_dlq_entry(
         try:
             parsed = json.loads(raw)
             if isinstance(parsed, dict) and parsed.get("dlq_id") == dlq_id:
-                await queue.redis.lrem(dlq_key, 1, raw)
+                raw_str = raw.decode("utf-8") if isinstance(raw, bytes) else str(raw)
+                await queue.redis.lrem(dlq_key, 1, raw_str)
                 return {"status": "discarded", "dlq_id": dlq_id}
         except (json.JSONDecodeError, TypeError):
             continue

@@ -22,7 +22,7 @@ class EmbeddingService:
 
         # Compute embedding via ONNX
         model = self._get_model()
-        vector = list(next(model.embed([text])))
+        vector = [float(v) for v in next(iter(model.embed([text])))]
 
         # Store in LRU cache
         if len(self._cache) >= self.cache_capacity:

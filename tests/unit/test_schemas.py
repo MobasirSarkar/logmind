@@ -27,6 +27,7 @@ def test_log_record_with_typed_metadata():
     )
     assert record.level == LogLevel.ERROR
     assert record.context.service == "payment-service"
+    assert record.http is not None
     assert record.http.status_code == 504
     assert record.metadata["custom_key"] == 42
 

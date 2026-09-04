@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Generic, Optional, TypeVar
+from typing import Any, Optional, cast
 from pydantic import BaseModel, Field
 
 class LogLevel(str, Enum):
@@ -21,8 +21,6 @@ class ErrorStage(str, Enum):
     EMBEDDING = "EMBEDDING"
     INDEXING = "INDEXING"
 
-TMetadata = TypeVar("TMetadata")
-TPayload = TypeVar("TPayload")
 
 class ServiceContext(BaseModel):
     tenant_id: str
@@ -52,7 +50,7 @@ class LogFingerprint(BaseModel):
     embedding: Optional[list[float]] = None
     model_name: Optional[str] = "BAAI/bge-small-en-v1.5"
 
-class LogRecord(BaseModel, Generic[TMetadata]):
+class LogRecord[TMetadata: dict[str, Any]](BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     timestamp: datetime
     level: LogLevel
@@ -62,9 +60,9 @@ class LogRecord(BaseModel, Generic[TMetadata]):
     http: Optional[HttpContext] = None
     error: Optional[ErrorInfo] = None
     fingerprint: Optional[LogFingerprint] = None
-    metadata: TMetadata = Field(default_factory=dict)
+    metadata: TMetadata = Field(default_factory=lambda: cast(Any, {}))
 
-class DLQEntry(BaseModel, Generic[TPayload]):
+class DLQEntry[TPayload: dict[str, Any]](BaseModel):
     dlq_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     tenant_id: str
     failed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

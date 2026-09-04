@@ -30,5 +30,6 @@ class QueueService:
             raw = await self.redis.rpop(key)
             if raw is None:
                 break
-            items.append(json.loads(raw))
+            if isinstance(raw, (str, bytes, bytearray)):
+                items.append(json.loads(raw))
         return items

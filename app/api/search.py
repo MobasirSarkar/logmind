@@ -1,7 +1,8 @@
 from enum import Enum
-from typing import Any, Optional
+
 from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel, Field
+
 from app.config import settings
 from app.services.elasticsearch import ElasticsearchService
 from app.services.embeddings import EmbeddingService

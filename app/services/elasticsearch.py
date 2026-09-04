@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any, Optional, cast
 from elasticsearch import AsyncElasticsearch, helpers
 from app.models.log import LogRecord
 
@@ -43,7 +43,8 @@ class ElasticsearchService:
                 },
                 "size": limit
             }
-            return await self.es.search(index=index, body=body)
+            res = await self.es.search(index=index, body=body)
+            return cast(dict[str, Any], res.body)
 
         if mode == "semantic" and query_vector:
             body = {
@@ -55,7 +56,8 @@ class ElasticsearchService:
                 },
                 "size": limit
             }
-            return await self.es.search(index=index, body=body)
+            res = await self.es.search(index=index, body=body)
+            return cast(dict[str, Any], res.body)
 
         # Hybrid Search (RRF)
         body = {
@@ -74,4 +76,5 @@ class ElasticsearchService:
             "rank": {"rrf": {"window_size": 50, "rank_constant": 60}},
             "size": limit
         }
-        return await self.es.search(index=index, body=body)
+        res = await self.es.search(index=index, body=body)
+        return cast(dict[str, Any], res.body)
