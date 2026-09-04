@@ -3,17 +3,19 @@ import pytest
 from httpx import AsyncClient, ASGITransport
 from unittest.mock import AsyncMock, MagicMock
 from app.api.deps import get_embedding_service, get_es_service
+from app.models.search import ESSearchResult
 from app.main import create_app
 
 @pytest.mark.asyncio
 async def test_search_hybrid_execution():
     app = create_app()
     mock_es = AsyncMock()
-    mock_es.search.return_value = {
+    mock_es.search.return_value = ESSearchResult.model_validate({
         "hits": {
-            "total": {"value": 1},
+            "total": {"value": 1, "relation": "eq"},
             "hits": [
                 {
+                    "_index": "logmind-logs-tenant-test",
                     "_id": "ch-123",
                     "_source": {
                         "message": "GatewayTimeoutException",
@@ -23,7 +25,7 @@ async def test_search_hybrid_execution():
                 }
             ]
         }
-    }
+    })
     mock_embed = MagicMock()
     mock_embed.get_or_compute_embedding.return_value = [0.05] * 384
     app.dependency_overrides[get_es_service] = lambda: mock_es

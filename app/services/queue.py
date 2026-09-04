@@ -1,7 +1,10 @@
 import json
 from typing import Any
+
 import redis.asyncio as aioredis
+
 from app.constants import RedisKeyPrefix
+
 
 class QueueService:
     def __init__(self, redis_client: aioredis.Redis, max_depth: int = 50000):

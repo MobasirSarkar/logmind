@@ -2,7 +2,9 @@ import hashlib
 import ipaddress
 import uuid
 from datetime import datetime
+
 from app.models.log import LogRecord
+
 
 def is_valid_uuid(token: str) -> bool:
     try:

@@ -3,6 +3,7 @@ import pytest
 from httpx import AsyncClient, ASGITransport
 from unittest.mock import AsyncMock, MagicMock
 from app.api.deps import get_embedding_service, get_es_service, get_queue_service
+from app.models.search import ESSearchResult
 from app.main import create_app
 
 @pytest.mark.asyncio
@@ -12,9 +13,9 @@ async def test_full_pipeline_ingest_to_search_and_dlq():
     mock_qs.is_queue_saturated.return_value = False
     mock_qs.enqueue_batch.return_value = 1
     mock_es = AsyncMock()
-    mock_es.search.return_value = {
-        "hits": {"total": {"value": 1}, "hits": [{"_id": "1", "_source": {"message": "Success"}}]}
-    }
+    mock_es.search.return_value = ESSearchResult.model_validate({
+        "hits": {"total": {"value": 1, "relation": "eq"}, "hits": [{"_index": "logmind-logs-tenant-e2e", "_id": "1", "_source": {"message": "Success"}}]}
+    })
     mock_embed = MagicMock()
     mock_embed.get_or_compute_embedding.return_value = [0.1] * 384
     app.dependency_overrides[get_queue_service] = lambda: mock_qs

@@ -41,7 +41,7 @@ async def search_logs(
     )
     return ApiResponse.ok(
         SearchResponseData(
-            total=res.get("hits", {}).get("total", {}).get("value", 0),
-            hits=res.get("hits", {}).get("hits", []),
+            total=res.hits.total.value,
+            hits=res.hits.hits,
         )
     )

@@ -1,7 +1,6 @@
 from typing import Any
-
 from pydantic import BaseModel
-
+from app.models.search import SearchHit
 
 class DLQActionData(BaseModel):
     status: str
@@ -19,4 +18,4 @@ class LogBatchResponseData(BaseModel):
 
 class SearchResponseData(BaseModel):
     total: int
-    hits: list[dict[str, Any]]
+    hits: list[SearchHit[dict[str, Any]]]

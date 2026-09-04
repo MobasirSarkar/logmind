@@ -1,13 +1,14 @@
 from collections import OrderedDict
-from typing import Optional
+
 from fastembed import TextEmbedding
+
 
 class EmbeddingService:
     def __init__(self, model_name: str = "BAAI/bge-small-en-v1.5", cache_capacity: int = 10000):
         self.model_name = model_name
         self.cache_capacity = cache_capacity
         self._cache: OrderedDict[str, list[float]] = OrderedDict()
-        self._model: Optional[TextEmbedding] = None
+        self._model: TextEmbedding | None = None
 
     def _get_model(self) -> TextEmbedding:
         if self._model is None:
