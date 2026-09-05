@@ -8,7 +8,7 @@ from app.models.log import LogRecord
 
 def is_valid_uuid(token: str) -> bool:
     try:
-        uuid.UUID(token.strip("(),:;"))
+        _ = uuid.UUID(token.strip("(),:;"))
         return True
     except (ValueError, AttributeError):
         return False
@@ -16,14 +16,14 @@ def is_valid_uuid(token: str) -> bool:
 def is_valid_ip(token: str) -> bool:
     clean = token.split(":")[0].strip("(),;[]")
     try:
-        ipaddress.ip_address(clean)
+        _ = ipaddress.ip_address(clean)
         return True
     except (ValueError, AttributeError):
         return False
 
 def is_valid_iso_timestamp(token: str) -> bool:
     try:
-        datetime.fromisoformat(token.strip("(),;"))
+        _ = datetime.fromisoformat(token.strip("(),;"))
         return True
     except (ValueError, AttributeError):
         return False
@@ -32,7 +32,7 @@ def is_valid_hex(token: str) -> bool:
     clean = token.strip("(),;:").lower()
     if clean.startswith("0x") and len(clean) > 2:
         try:
-            int(clean, 16)
+            _ = int(clean, 16)
             return True
         except ValueError:
             return False

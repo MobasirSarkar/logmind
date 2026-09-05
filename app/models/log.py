@@ -1,9 +1,11 @@
 import uuid
 from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, cast
+from typing import Any
 
 from pydantic import BaseModel, Field
+
+from app.constants import EmbeddingModel
 
 
 class LogLevel(str, Enum):
@@ -50,9 +52,9 @@ class LogFingerprint(BaseModel):
     signature_hash: str | None = None
     hash_type: HashType = HashType.SHA256
     embedding: list[float] | None = None
-    model_name: str | None = "BAAI/bge-small-en-v1.5"
+    model_name: str | None = EmbeddingModel.BGE_SMALL_EN.value
 
-class LogRecord[TMetadata: dict[str, Any]](BaseModel):
+class LogRecord(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     timestamp: datetime
     level: LogLevel
@@ -62,13 +64,15 @@ class LogRecord[TMetadata: dict[str, Any]](BaseModel):
     http: HttpContext | None = None
     error: ErrorInfo | None = None
     fingerprint: LogFingerprint | None = None
-    metadata: TMetadata = Field(default_factory=lambda: cast(Any, {}))
+    metadata: dict[str, object] = Field(default_factory=dict)
 
-class DLQEntry[TPayload: dict[str, Any]](BaseModel):
+type RawLogPayload = dict[str, Any]
+
+class DLQEntry(BaseModel):
     dlq_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     tenant_id: str
     failed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     retry_count: int
     error_stage: ErrorStage
     last_error: str
-    raw_payload: TPayload
+    raw_payload: RawLogPayload

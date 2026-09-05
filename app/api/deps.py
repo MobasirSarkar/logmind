@@ -42,6 +42,16 @@ def get_embedding_service() -> EmbeddingService:
         _embedding_service = EmbeddingService(settings.EMBEDDING_MODEL_NAME)
     return _embedding_service
 
+
+async def close_services() -> None:
+    global _queue_service, _es_service, _embedding_service
+    if _queue_service is not None:
+        await _queue_service.redis.aclose()
+        _queue_service = None
+    if _es_service is not None:
+        await _es_service.es.close()
+        _es_service = None
+    _embedding_service = None
 # Module-level dependency aliases satisfying B008
 QueueDep = Annotated[QueueService, Depends(get_queue_service)]
 EsDep = Annotated[ElasticsearchService, Depends(get_es_service)]

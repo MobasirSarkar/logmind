@@ -1,21 +1,23 @@
 # tests/unit/test_schemas.py
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+
 from app.models.log import (
-    LogLevel,
-    HashType,
+    DLQEntry,
+    ErrorInfo,
     ErrorStage,
+    HashType,
+    HttpContext,
+    LogFingerprint,
+    LogLevel,
+    LogRecord,
     ServiceContext,
     TraceContext,
-    HttpContext,
-    ErrorInfo,
-    LogFingerprint,
-    LogRecord,
-    DLQEntry,
 )
+
 
 def test_log_record_with_typed_metadata():
     record = LogRecord(
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
         level=LogLevel.ERROR,
         message="Payment timeout",
         context=ServiceContext(tenant_id="t-1", service="payment-service"),

@@ -1,6 +1,8 @@
 # tests/unit/test_embeddings.py
 from unittest.mock import MagicMock
+
 from app.services.embeddings import EmbeddingService
+
 
 def test_embedding_service_dimension_and_cache():
     service = EmbeddingService(model_name="BAAI/bge-small-en-v1.5")

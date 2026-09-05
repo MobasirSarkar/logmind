@@ -1,11 +1,13 @@
 # tests/unit/test_normalizer.py
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+
 from app.models.log import LogLevel, LogRecord, ServiceContext, TraceContext
 from app.services.normalizer import (
-    sanitize_error_message,
-    generate_signature_hash,
     generate_content_hash,
+    generate_signature_hash,
+    sanitize_error_message,
 )
+
 
 def test_sanitize_tokens_without_regex():
     raw_message = "Connection to 192.168.1.50:5432 failed for user 91024 with uuid 123e4567-e89b-12d3-a456-426614174000 at 0x7ffd98"
@@ -26,7 +28,7 @@ def test_signature_hash_deterministic():
     assert len(hash1) == 64  # SHA-256 hex digest
 
 def test_content_hash_idempotency():
-    ts = datetime(2026, 9, 4, 10, 30, 0, tzinfo=timezone.utc)
+    ts = datetime(2026, 9, 4, 10, 30, 0, tzinfo=UTC)
     rec1 = LogRecord(
         timestamp=ts,
         level=LogLevel.ERROR,

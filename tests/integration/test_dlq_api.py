@@ -1,9 +1,12 @@
 # tests/integration/test_dlq_api.py
-import pytest
-from httpx import AsyncClient, ASGITransport
 from unittest.mock import AsyncMock
+
+import pytest
+from httpx import ASGITransport, AsyncClient
+
 from app.api.deps import get_queue_service
 from app.main import create_app
+
 
 @pytest.mark.asyncio
 async def test_dlq_list_and_replay():

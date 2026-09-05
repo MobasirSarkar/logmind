@@ -1,7 +1,10 @@
 # tests/unit/test_queue.py
-import pytest
 from unittest.mock import AsyncMock
+
+import pytest
+
 from app.services.queue import QueueService
+
 
 @pytest.mark.asyncio
 async def test_queue_backpressure_threshold():

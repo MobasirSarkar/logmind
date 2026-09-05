@@ -1,10 +1,13 @@
 # tests/integration/test_end_to_end_flow.py
-import pytest
-from httpx import AsyncClient, ASGITransport
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+from httpx import ASGITransport, AsyncClient
+
 from app.api.deps import get_embedding_service, get_es_service, get_queue_service
-from app.models.search import ESSearchResult
 from app.main import create_app
+from app.models.search import ESSearchResult
+
 
 @pytest.mark.asyncio
 async def test_full_pipeline_ingest_to_search_and_dlq():

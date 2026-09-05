@@ -1,10 +1,16 @@
 # tests/integration/test_hybrid_search.py
-import pytest
-from httpx import AsyncClient, ASGITransport
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+from elastic_transport import ApiResponseMeta, HttpHeaders, NodeConfig
+from elasticsearch import NotFoundError
+from httpx import ASGITransport, AsyncClient
+
 from app.api.deps import get_embedding_service, get_es_service
-from app.models.search import ESSearchResult
 from app.main import create_app
+from app.models.search import ESSearchResult
+from app.services.elasticsearch import ElasticsearchService
+
 
 @pytest.mark.asyncio
 async def test_search_hybrid_execution():
@@ -43,3 +49,14 @@ async def test_search_hybrid_execution():
     data = body["data"]
     assert data["total"] == 1
     assert data["hits"][0]["_source"]["context"]["service"] == "payment-service"
+
+
+@pytest.mark.asyncio
+async def test_search_missing_index_returns_empty_results():
+    mock_client = AsyncMock()
+    meta = ApiResponseMeta(404, "HTTP/1.1", HttpHeaders(), 0.0, NodeConfig("http", "localhost", 9200))
+    mock_client.search.side_effect = NotFoundError("no such index [logmind-logs-acme]", meta, {})
+    svc = ElasticsearchService(mock_client)
+    res = await svc.search(tenant_id="acme", query="anything")
+    assert res.hits.total.value == 0
+    assert res.hits.hits == []

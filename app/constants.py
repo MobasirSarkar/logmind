@@ -13,3 +13,7 @@ class ESIndexPrefix(str, Enum):
 
     def for_tenant(self, tenant_id: str) -> str:
         return f"{self.value}-{tenant_id}"
+
+
+class EmbeddingModel(str, Enum):
+    BGE_SMALL_EN = "BAAI/bge-small-en-v1.5"

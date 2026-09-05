@@ -1,6 +1,7 @@
 # tests/unit/test_config.py
 from app.config import Settings
 
+
 def test_settings_load_defaults():
     settings = Settings(
         REDIS_URL="redis://localhost:6379/0",

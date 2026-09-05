@@ -1,16 +1,15 @@
-from typing import Any
-
 from pydantic import BaseModel
 
 from app.models.search import SearchHit
 
+type DLQItem = dict[str, object]
 
 class DLQActionData(BaseModel):
     status: str
     dlq_id: str
 
 class DLQListData(BaseModel):
-    items: list[dict[str, Any]]
+    items: list[DLQItem]
     count: int
 
 class LogBatchResponseData(BaseModel):
@@ -21,4 +20,4 @@ class LogBatchResponseData(BaseModel):
 
 class SearchResponseData(BaseModel):
     total: int
-    hits: list[SearchHit[dict[str, Any]]]
+    hits: list[SearchHit]

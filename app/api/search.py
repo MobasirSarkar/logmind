@@ -1,4 +1,5 @@
-from enum import Enum
+import asyncio
+from enum import StrEnum
 
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
@@ -10,7 +11,7 @@ from app.services.normalizer import generate_signature_hash
 
 router = APIRouter(prefix="/api/v1/logs", tags=["Search"])
 
-class SearchMode(str, Enum):
+class SearchMode(StrEnum):
     EXACT = "exact"
     SEMANTIC = "semantic"
     HYBRID = "hybrid"
@@ -20,18 +21,20 @@ class SearchRequest(BaseModel):
     mode: SearchMode = SearchMode.HYBRID
     limit: int = Field(default=20, ge=1, le=100)
 
-@router.post("/search", response_model=ApiResponse[SearchResponseData])
+@router.post("/search")
 async def search_logs(
     req: SearchRequest,
     x_tenant_id: TenantIdHeader,
-    _: ApiKeyDep,
+    _api_key: ApiKeyDep,
     es: EsDep,
     embed: EmbeddingDep,
-):
+) -> ApiResponse[SearchResponseData]:
     vector = None
     if req.mode in (SearchMode.SEMANTIC, SearchMode.HYBRID):
         s_hash = generate_signature_hash(req.query)
-        vector = embed.get_or_compute_embedding(s_hash, req.query)
+        vector = await asyncio.to_thread(
+            embed.get_or_compute_embedding, s_hash, req.query
+        )
 
     res = await es.search(
         tenant_id=x_tenant_id,
@@ -40,7 +43,7 @@ async def search_logs(
         query_vector=vector,
         limit=req.limit,
     )
-    return ApiResponse.ok(
+    return ApiResponse[SearchResponseData].ok(
         SearchResponseData(
             total=res.hits.total.value,
             hits=res.hits.hits,
