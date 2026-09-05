@@ -44,3 +44,37 @@ def test_content_hash_idempotency():
         trace=TraceContext(trace_id="tr-1")
     )
     assert generate_content_hash(rec1) == generate_content_hash(rec2)
+
+def test_log_enricher_enrich_and_batch():
+    from unittest.mock import MagicMock
+
+    from app.services.normalizer import LogEnricher
+
+    mock_embed = MagicMock()
+    mock_embed.get_or_compute_embedding.return_value = [0.1] * 384
+    enricher = LogEnricher(embedding_service=mock_embed)
+
+    valid_item = {
+        "timestamp": "2026-09-04T10:30:00Z",
+        "level": "ERROR",
+        "message": "Timeout on 192.168.1.1:8080",
+        "error": {"error_type": "TimeoutError", "error_message": "Connection timed out"},
+    }
+    malformed_item = "not-a-dict"
+
+    # 1. Single enrich
+    rec = enricher.enrich(valid_item, tenant_id="t-1")
+    assert rec.context.tenant_id == "t-1"
+    assert rec.context.service == "default"
+    assert rec.fingerprint is not None
+    assert rec.fingerprint.content_hash is not None
+    assert len(rec.fingerprint.embedding or []) == 384
+    assert rec.error is not None
+    assert rec.error.error_signature is not None
+
+    # 2. Batch enrich
+    valid_records, dlq_entries = enricher.enrich_batch([valid_item, malformed_item], tenant_id="t-1")
+    assert len(valid_records) == 1
+    assert len(dlq_entries) == 1
+    assert dlq_entries[0].tenant_id == "t-1"
+    assert "Log payload must be a JSON object" in dlq_entries[0].last_error

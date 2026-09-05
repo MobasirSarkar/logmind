@@ -1,9 +1,17 @@
 import hashlib
 import ipaddress
 import uuid
+from collections.abc import Sequence
 from datetime import datetime
+from typing import Any
 
-from app.models.log import LogRecord
+from app.models.log import (
+    DLQEntry,
+    ErrorStage,
+    HashType,
+    LogFingerprint,
+    LogRecord,
+)
 
 
 def is_valid_uuid(token: str) -> bool:
@@ -70,3 +78,68 @@ def generate_content_hash(record: LogRecord) -> str:
     trace_id = record.trace.trace_id if record.trace else "no-trace"
     raw = f"{record.context.tenant_id}|{record.context.service}|{record.timestamp.isoformat()}|{record.message}|{trace_id}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+class LogEnricher:
+    def __init__(self, embedding_service: Any | None = None):
+        self.embeddings = embedding_service
+
+    def enrich(self, raw: object, tenant_id: str) -> LogRecord:
+        if not isinstance(raw, dict):
+            raise TypeError(f"Log payload must be a JSON object, got {type(raw).__name__}")
+
+        item = dict(raw)
+        if "context" not in item:
+            item["context"] = {
+                "tenant_id": tenant_id,
+                "service": item.get("service", "default"),
+                "environment": item.get("environment", "production"),
+            }
+        elif isinstance(item["context"], dict) and not item["context"].get("tenant_id"):
+            ctx = dict(item["context"])
+            ctx["tenant_id"] = tenant_id
+            item["context"] = ctx
+
+        record = LogRecord.model_validate(item)
+        c_hash = generate_content_hash(record)
+
+        raw_text = record.error.error_message if record.error else record.message
+        sanitized = sanitize_error_message(raw_text)
+        s_hash = generate_signature_hash(sanitized)
+
+        vector: list[float] | None = None
+        if self.embeddings is not None:
+            vector = self.embeddings.get_or_compute_embedding(s_hash, sanitized)
+
+        if record.error:
+            record.error.error_signature = sanitized
+
+        record.fingerprint = LogFingerprint(
+            content_hash=c_hash,
+            signature_hash=s_hash,
+            hash_type=HashType.SHA256,
+            embedding=vector,
+        )
+        return record
+
+    def enrich_batch(
+        self, raw_items: Sequence[object], tenant_id: str
+    ) -> tuple[list[LogRecord], list[DLQEntry]]:
+        valid_records: list[LogRecord] = []
+        dlq_entries: list[DLQEntry] = []
+
+        for item in raw_items:
+            try:
+                record = self.enrich(item, tenant_id=tenant_id)
+                valid_records.append(record)
+            except Exception as exc:  # noqa: BLE001
+                dlq = DLQEntry(
+                    tenant_id=tenant_id,
+                    retry_count=3,
+                    error_stage=ErrorStage.VALIDATION,
+                    last_error=str(exc),
+                    raw_payload=item if isinstance(item, dict) else {"raw": str(item)},
+                )
+                dlq_entries.append(dlq)
+
+        return valid_records, dlq_entries
