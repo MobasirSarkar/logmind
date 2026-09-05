@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.pool import StaticPool
 
 from app.config import settings
 from correlation.models import (
@@ -87,7 +88,14 @@ class IncidentEventORM(Base):
 class DatabaseManager:
     def __init__(self, database_url: str | None = None):
         self.url = database_url or settings.DATABASE_URL
-        self.engine: AsyncEngine = create_async_engine(self.url)
+        if ":memory:" in self.url:
+            self.engine: AsyncEngine = create_async_engine(
+                self.url,
+                connect_args={"check_same_thread": False},
+                poolclass=StaticPool,
+            )
+        else:
+            self.engine: AsyncEngine = create_async_engine(self.url)
         self.session_factory = async_sessionmaker(self.engine, expire_on_commit=False, class_=AsyncSession)
 
     async def ensure_tables(self) -> None:
