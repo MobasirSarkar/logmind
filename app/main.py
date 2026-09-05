@@ -16,6 +16,8 @@ from app.api.dlq import router as dlq_router
 from app.api.ingest import router as ingest_router
 from app.api.search import router as search_router
 from app.workers.indexer import run_worker_loop
+from correlation.api import close_database_manager, get_database_manager
+from correlation.api import router as correlation_router
 from simulator.api import close_simulation_engine
 from simulator.api import router as simulator_router
 
@@ -46,6 +48,13 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
     except Exception as exc:  # noqa: BLE001
         logger.warning("Embedding model warmup failed: %s", exc)
 
+    db_manager = get_database_manager()
+    try:
+        await db_manager.ensure_tables()
+        logger.info("Database tables verified")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Database table creation failed: %s", exc)
+
     worker_task = asyncio.create_task(
         run_worker_loop(
             queue_service,
@@ -66,7 +75,8 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
 
         await close_services()
         await close_simulation_engine()
-        logger.info("Services and simulator closed gracefully")
+        await close_database_manager()
+        logger.info("Services, simulator, and database closed gracefully")
 
 def create_app() -> FastAPI:
     app = FastAPI(
@@ -78,6 +88,7 @@ def create_app() -> FastAPI:
     app.include_router(dlq_router)
     app.include_router(search_router)
     app.include_router(simulator_router)
+    app.include_router(correlation_router)
     return app
 app = create_app()
 
