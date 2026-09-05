@@ -56,11 +56,16 @@ class InvestigationEngine:
         llm_client: LLMProvider,
         fallback_engine: DeterministicFallbackEngine,
         db_manager: InvestigationDatabaseManager | None = None,
+        es_service: Any | None = None,
+        corr_db_manager: Any | None = None,
+        runbook_service: Any | None = None,
     ):
         self.llm = llm_client
         self.fallback = fallback_engine
         self.db = db_manager
-
+        self.es = es_service
+        self.corr_db = corr_db_manager
+        self.runbooks = runbook_service
     def _build_initial_messages(self, incident: Incident) -> list[ChatMessage]:
         timeline_str = "\n".join(
             f"- [{e.timestamp.isoformat()}] {e.service}: {e.event_type.value} - {e.message}"
@@ -264,10 +269,10 @@ Investigate the incident now. Use available tools to identify the root cause and
         self, incident: Incident, toolbox: InvestigationToolbox | None = None
     ) -> InvestigationReport:
         if toolbox is None:
-            # Construct default toolbox if not provided
             toolbox = InvestigationToolbox(
-                es_service=self.llm,  # fallback placeholder if not wired
-                db_manager=self.db,
+                es_service=self.es,
+                db_manager=self.corr_db,
                 tenant_id=incident.tenant_id,
+                runbook_service=self.runbooks,
             )
         return await self.run_investigation_loop(incident, toolbox=toolbox)

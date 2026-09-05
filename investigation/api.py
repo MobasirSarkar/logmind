@@ -12,7 +12,6 @@ from investigation.engine import InvestigationEngine
 from investigation.fallback import DeterministicFallbackEngine
 from investigation.models import InvestigationReport, InvestigationStep
 from investigation.runbooks import RunbookService
-from investigation.tools import InvestigationToolbox
 
 _inv_db: InvestigationDatabaseManager | None = None
 _runbook_service: RunbookService | None = None
@@ -32,16 +31,27 @@ def get_runbook_service(es: EsDep, embed: EmbeddingDep) -> RunbookService:
         _runbook_service = RunbookService(es_service=es.es, embedding_service=embed)
     return _runbook_service
 
+InvDbDep = Annotated[InvestigationDatabaseManager, Depends(get_investigation_db)]
+RunbookDep = Annotated[RunbookService, Depends(get_runbook_service)]
+
 
 def get_investigation_engine(
-    inv_db: Annotated[InvestigationDatabaseManager, Depends(get_investigation_db)],
+    inv_db: InvDbDep,
+    es: EsDep,
+    corr_db: CorrDbDep,
+    runbooks: RunbookDep,
 ) -> InvestigationEngine:
     global _investigation_engine
     if _investigation_engine is None:
         llm = OpenAICompatibleClient()
         fallback = DeterministicFallbackEngine()
         _investigation_engine = InvestigationEngine(
-            llm_client=llm, fallback_engine=fallback, db_manager=inv_db
+            llm_client=llm,
+            fallback_engine=fallback,
+            db_manager=inv_db,
+            es_service=es.es,
+            corr_db_manager=corr_db,
+            runbook_service=runbooks,
         )
     return _investigation_engine
 
@@ -59,8 +69,6 @@ async def close_investigation_services() -> None:
     _runbook_service = None
 
 
-InvDbDep = Annotated[InvestigationDatabaseManager, Depends(get_investigation_db)]
-RunbookDep = Annotated[RunbookService, Depends(get_runbook_service)]
 InvestigationEngineDep = Annotated[InvestigationEngine, Depends(get_investigation_engine)]
 
 router = APIRouter(tags=["AI Investigation"])
@@ -90,22 +98,14 @@ async def start_investigation(
     incident_id: str,
     x_tenant_id: TenantIdHeader,
     _api_key: ApiKeyDep,
-    es: EsDep,
     corr_db: CorrDbDep,
-    runbooks: RunbookDep,
     engine: InvestigationEngineDep,
 ) -> ApiResponse[InvestigationReport]:
     incident = await corr_db.get_incident(incident_id)
     if incident is None or incident.tenant_id != x_tenant_id:
         raise HTTPException(status_code=404, detail=f"Incident '{incident_id}' not found")
 
-    toolbox = InvestigationToolbox(
-        es_service=es.es,
-        db_manager=corr_db,
-        tenant_id=x_tenant_id,
-        runbook_service=runbooks,
-    )
-    report = await engine.run_investigation_loop(incident=incident, toolbox=toolbox)
+    report = await engine.investigate_incident(incident)
     return ApiResponse[InvestigationReport].ok(report)
 
 
@@ -155,18 +155,14 @@ async def retry_investigation(
     incident_id: str,
     x_tenant_id: TenantIdHeader,
     _api_key: ApiKeyDep,
-    es: EsDep,
     corr_db: CorrDbDep,
-    runbooks: RunbookDep,
     engine: InvestigationEngineDep,
 ) -> ApiResponse[InvestigationReport]:
     return await start_investigation(
         incident_id=incident_id,
         x_tenant_id=x_tenant_id,
         _api_key=_api_key,
-        es=es,
         corr_db=corr_db,
-        runbooks=runbooks,
         engine=engine,
     )
 
