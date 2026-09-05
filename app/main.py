@@ -18,6 +18,12 @@ from app.api.search import router as search_router
 from app.workers.indexer import run_worker_loop
 from correlation.api import close_database_manager, get_database_manager
 from correlation.api import router as correlation_router
+from investigation.api import (
+    close_investigation_services,
+    get_investigation_db,
+    get_runbook_service,
+)
+from investigation.api import router as investigation_router
 from simulator.api import close_simulation_engine
 from simulator.api import router as simulator_router
 
@@ -55,6 +61,20 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
     except Exception as exc:  # noqa: BLE001
         logger.warning("Database table creation failed: %s", exc)
 
+    inv_db = get_investigation_db()
+    try:
+        await inv_db.ensure_tables()
+        logger.info("Investigation tables verified")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Investigation table creation failed: %s", exc)
+
+    runbook_service = get_runbook_service(es_service, embedding_service)
+    try:
+        await runbook_service.ensure_runbook_template()
+        logger.info("Runbook template verified")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Runbook template verification failed: %s", exc)
+
     worker_task = asyncio.create_task(
         run_worker_loop(
             queue_service,
@@ -76,7 +96,8 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
         await close_services()
         await close_simulation_engine()
         await close_database_manager()
-        logger.info("Services, simulator, and database closed gracefully")
+        await close_investigation_services()
+        logger.info("Services, simulator, database, and investigation closed gracefully")
 
 def create_app() -> FastAPI:
     app = FastAPI(
@@ -89,6 +110,7 @@ def create_app() -> FastAPI:
     app.include_router(search_router)
     app.include_router(simulator_router)
     app.include_router(correlation_router)
+    app.include_router(investigation_router)
     return app
 app = create_app()
 
