@@ -15,14 +15,10 @@ from app.api.deps import (
 from app.api.dlq import router as dlq_router
 from app.api.ingest import router as ingest_router
 from app.api.search import router as search_router
+from app.db import close_datastore, get_datastore
 from app.workers.indexer import run_worker_loop
-from correlation.api import close_database_manager, get_database_manager
 from correlation.api import router as correlation_router
-from investigation.api import (
-    close_investigation_services,
-    get_investigation_db,
-    get_runbook_service,
-)
+from investigation.api import get_runbook_service
 from investigation.api import router as investigation_router
 from simulator.api import close_simulation_engine
 from simulator.api import router as simulator_router
@@ -54,20 +50,12 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
     except Exception as exc:  # noqa: BLE001
         logger.warning("Embedding model warmup failed: %s", exc)
 
-    db_manager = get_database_manager()
+    datastore = get_datastore()
     try:
-        await db_manager.ensure_tables()
-        logger.info("Database tables verified")
+        await datastore.ensure_tables()
+        logger.info("Database tables verified across all services")
     except Exception as exc:  # noqa: BLE001
         logger.warning("Database table creation failed: %s", exc)
-
-    inv_db = get_investigation_db()
-    try:
-        await inv_db.ensure_tables()
-        logger.info("Investigation tables verified")
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Investigation table creation failed: %s", exc)
-
     runbook_service = get_runbook_service(es_service, embedding_service)
     try:
         await runbook_service.ensure_runbook_template()
@@ -95,9 +83,8 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
 
         await close_services()
         await close_simulation_engine()
-        await close_database_manager()
-        await close_investigation_services()
-        logger.info("Services, simulator, database, and investigation closed gracefully")
+        await close_datastore()
+        logger.info("Services, simulator, and datastore closed gracefully")
 
 def create_app() -> FastAPI:
     app = FastAPI(

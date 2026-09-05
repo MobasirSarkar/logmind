@@ -11,16 +11,9 @@ from sqlalchemy import (
     Text,
     select,
 )
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.config import settings
+from app.db import Base, Datastore, get_datastore
 from investigation.models import (
     EvidenceItem,
     EvidenceType,
@@ -29,10 +22,6 @@ from investigation.models import (
     InvestigationStep,
     ToolName,
 )
-
-
-class Base(DeclarativeBase):
-    pass
 
 
 class InvestigationReportORM(Base):
@@ -97,24 +86,23 @@ class InvestigationStepORM(Base):
 
 
 class InvestigationDatabaseManager:
-    def __init__(self, database_url: str | None = None):
-        self.url = database_url or settings.DATABASE_URL
-        if ":memory:" in self.url:
-            self.engine: AsyncEngine = create_async_engine(
-                self.url,
-                connect_args={"check_same_thread": False},
-                poolclass=StaticPool,
-            )
+    def __init__(
+        self, database_url: str | None = None, datastore: Datastore | None = None
+    ):
+        if datastore is not None:
+            self.datastore = datastore
+        elif database_url is not None:
+            self.datastore = Datastore(database_url)
         else:
-            self.engine: AsyncEngine = create_async_engine(self.url)
-        self.session_factory = async_sessionmaker(self.engine, expire_on_commit=False, class_=AsyncSession)
+            self.datastore = get_datastore()
+        self.engine = self.datastore.engine
+        self.session_factory = self.datastore.session_factory
 
     async def ensure_tables(self) -> None:
-        async with self.engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+        await self.datastore.ensure_tables()
 
     async def close(self) -> None:
-        await self.engine.dispose()
+        await self.datastore.close()
 
     async def save_report(self, report: InvestigationReport) -> InvestigationReport:
         async with self.session_factory() as session:
