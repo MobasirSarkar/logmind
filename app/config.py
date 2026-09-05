@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     ELASTICSEARCH_URL: str = "http://localhost:9200"
     QUEUE_MAX_DEPTH: int = 50000
     EMBEDDING_MODEL_NAME: str = EmbeddingModel.BGE_SMALL_EN.value
+    DATABASE_URL: str = "sqlite+aiosqlite:///:memory:"
     API_KEY: str = "lmd_dev_key"
 
 settings = Settings()
