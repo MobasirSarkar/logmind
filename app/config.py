@@ -12,5 +12,7 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL_NAME: str = EmbeddingModel.BGE_SMALL_EN.value
     DATABASE_URL: str = "sqlite+aiosqlite:///:memory:"
     API_KEY: str = "lmd_dev_key"
-
+    LLM_KEY: str | None = None
+    LLM_BASE_URL: str = "https://openrouter.ai/api/v1"
+    LLM_MODEL: str = "anthropic/claude-3.5-sonnet"
 settings = Settings()
