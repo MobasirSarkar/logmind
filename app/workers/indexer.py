@@ -1,7 +1,5 @@
 import asyncio
-import json
 import logging
-
 from app.constants import RedisKeyPrefix
 from app.models.log import (
     DLQEntry,
@@ -86,8 +84,7 @@ class IndexerWorker:
 
         # Store DLQ in Redis list
         if dlq_entries:
-            dlq_key = RedisKeyPrefix.DLQ.for_tenant(tenant_id)
-            await self.queue.redis.lpush(dlq_key, *[json.dumps(d.model_dump(mode="json")) for d in dlq_entries])
+            _ = await self.queue.push_dlq(tenant_id, dlq_entries)
 
         logger.info(
             "Worker cycle completed for tenant '%s': %d indexed to Elasticsearch, %d routed to DLQ",

@@ -12,10 +12,18 @@ from app.main import create_app
 async def test_dlq_list_and_replay():
     app = create_app()
     mock_qs = AsyncMock()
-    fake_entry = '{"dlq_id": "dlq-123", "tenant_id": "t-1", "retry_count": 3, "error_stage": "VALIDATION", "last_error": "ValidationError", "raw_payload": {"msg": "bad"}}'
-    mock_qs.redis.lrange.return_value = [fake_entry]
-    mock_qs.redis.lrem.return_value = 1
-    mock_qs.redis.lpush.return_value = 1
+    entry_dict = {
+        "dlq_id": "dlq-123",
+        "tenant_id": "t-1",
+        "retry_count": 3,
+        "error_stage": "VALIDATION",
+        "last_error": "ValidationError",
+        "raw_payload": {"msg": "bad"},
+    }
+    mock_qs.list_dlq.return_value = [entry_dict]
+    mock_qs.get_dlq.return_value = entry_dict
+    mock_qs.replay_dlq.return_value = True
+    mock_qs.discard_dlq.return_value = True
     app.dependency_overrides[get_queue_service] = lambda: mock_qs
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
