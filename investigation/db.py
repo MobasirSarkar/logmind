@@ -1,88 +1,26 @@
 import uuid
-from datetime import datetime
 
-from sqlalchemy import (
-    JSON,
-    Boolean,
-    Float,
-    ForeignKey,
-    Integer,
-    String,
-    Text,
-    select,
-)
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import select
 
-from app.db import Base, Datastore, get_datastore
+from app.db import Datastore, get_datastore
 from investigation.models import (
     EvidenceItem,
+    EvidenceItemORM,
     EvidenceType,
     InvestigationReport,
+    InvestigationReportORM,
     InvestigationStatus,
     InvestigationStep,
+    InvestigationStepORM,
     ToolName,
 )
 
-
-class InvestigationReportORM(Base):
-    __tablename__ = "investigation_reports"
-
-    id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    incident_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    status: Mapped[str] = mapped_column(String(32), nullable=False)
-    summary: Mapped[str] = mapped_column(Text, nullable=False)
-    suspected_root_cause: Mapped[str] = mapped_column(Text, nullable=False)
-    confidence_score: Mapped[float] = mapped_column(Float, nullable=False)
-    affected_services: Mapped[list[str]] = mapped_column(JSON, default=list)
-    recommended_actions: Mapped[list[str]] = mapped_column(JSON, default=list)
-    started_at: Mapped[datetime] = mapped_column(nullable=False)
-    completed_at: Mapped[datetime] = mapped_column(nullable=False)
-    is_fallback: Mapped[bool] = mapped_column(Boolean, default=False)
-    metadata_json: Mapped[dict[str, object]] = mapped_column(JSON, default=dict)
-
-    evidence: Mapped[list["EvidenceItemORM"]] = relationship(
-        back_populates="report",
-        cascade="all, delete-orphan",
-        lazy="selectin",
-    )
-    steps: Mapped[list["InvestigationStepORM"]] = relationship(
-        back_populates="report",
-        cascade="all, delete-orphan",
-        order_by="InvestigationStepORM.step_number",
-        lazy="selectin",
-    )
-
-
-class EvidenceItemORM(Base):
-    __tablename__ = "investigation_evidence"
-
-    id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    report_id: Mapped[str] = mapped_column(
-        ForeignKey("investigation_reports.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    evidence_type: Mapped[str] = mapped_column(String(32), nullable=False)
-    reference_id: Mapped[str] = mapped_column(String(128), nullable=False)
-    service: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    timestamp: Mapped[datetime | None] = mapped_column(nullable=True)
-    excerpt: Mapped[str] = mapped_column(Text, nullable=False)
-
-    report: Mapped[InvestigationReportORM] = relationship(back_populates="evidence")
-
-
-class InvestigationStepORM(Base):
-    __tablename__ = "investigation_steps"
-
-    id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    report_id: Mapped[str] = mapped_column(
-        ForeignKey("investigation_reports.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    step_number: Mapped[int] = mapped_column(Integer, nullable=False)
-    tool_name: Mapped[str] = mapped_column(String(64), nullable=False)
-    tool_input: Mapped[dict[str, object]] = mapped_column(JSON, default=dict)
-    tool_output: Mapped[dict[str, object]] = mapped_column(JSON, default=dict)
-    duration_ms: Mapped[int] = mapped_column(Integer, nullable=False)
-
-    report: Mapped[InvestigationReportORM] = relationship(back_populates="steps")
+__all__ = [
+    "EvidenceItemORM",
+    "InvestigationDatabaseManager",
+    "InvestigationReportORM",
+    "InvestigationStepORM",
+]
 
 
 class InvestigationDatabaseManager:
@@ -106,7 +44,9 @@ class InvestigationDatabaseManager:
 
     async def save_report(self, report: InvestigationReport) -> InvestigationReport:
         async with self.session_factory() as session:
-            stmt = select(InvestigationReportORM).where(InvestigationReportORM.id == report.investigation_id)
+            stmt = select(InvestigationReportORM).where(
+                InvestigationReportORM.id == report.investigation_id
+            )
             result = await session.execute(stmt)
             existing = result.scalar_one_or_none()
 
@@ -164,7 +104,9 @@ class InvestigationDatabaseManager:
             await session.commit()
             return report
 
-    async def get_report_by_incident(self, incident_id: str) -> InvestigationReport | None:
+    async def get_report_by_incident(
+        self, incident_id: str
+    ) -> InvestigationReport | None:
         async with self.session_factory() as session:
             stmt = (
                 select(InvestigationReportORM)
@@ -179,7 +121,9 @@ class InvestigationDatabaseManager:
 
     async def get_report(self, investigation_id: str) -> InvestigationReport | None:
         async with self.session_factory() as session:
-            stmt = select(InvestigationReportORM).where(InvestigationReportORM.id == investigation_id)
+            stmt = select(InvestigationReportORM).where(
+                InvestigationReportORM.id == investigation_id
+            )
             result = await session.execute(stmt)
             r = result.scalar_one_or_none()
             if r is None:

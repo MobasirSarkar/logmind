@@ -2,19 +2,35 @@ import asyncio
 import hashlib
 import logging
 import uuid
-from typing import Any, cast
+from typing import Any, Protocol, cast, runtime_checkable
 
-from pydantic import BaseModel
+from investigation.models import RunbookItem
 
 logger = logging.getLogger("uvicorn.error")
 
 
-class RunbookItem(BaseModel):
-    id: str
-    service: str
-    title: str
-    content: str
-    score: float | None = None
+def _extract_es_dict(res: Any) -> dict[str, Any]:
+    if hasattr(res, "body") and isinstance(res.body, dict):
+        return res.body
+    if isinstance(res, dict):
+        return res
+    return {}
+
+
+@runtime_checkable
+class RunbookStore(Protocol):
+    """Seam for runbook search. Two adapters make this seam real:
+    ESRunbookAdapter (production) and an in-memory stub (tests).
+    # ponytail: in-memory adapter when first runbook integration test is written
+    """
+
+    async def search_runbooks(
+        self,
+        tenant_id: str,
+        query: str,
+        service: str | None = None,
+        limit: int = 5,
+    ) -> list[RunbookItem]: ...
 
 
 class RunbookService:
@@ -110,7 +126,8 @@ class RunbookService:
             logger.warning("Runbook search error: %s", exc)
             return []
 
-        hits = res.get("hits", {}).get("hits", []) if isinstance(res, dict) else []
+        data = _extract_es_dict(res)
+        hits = data.get("hits", {}).get("hits", [])
         results: list[RunbookItem] = []
         for h in hits:
             if not isinstance(h, dict):

@@ -10,7 +10,11 @@ from investigation.client import OpenAICompatibleClient
 from investigation.db import InvestigationDatabaseManager
 from investigation.engine import InvestigationEngine
 from investigation.fallback import DeterministicFallbackEngine
-from investigation.models import InvestigationReport, InvestigationStep
+from investigation.models import (
+    IncidentNotFound,
+    InvestigationReport,
+    InvestigationStep,
+)
 from investigation.runbooks import RunbookService
 
 _inv_db: InvestigationDatabaseManager | None = None
@@ -31,6 +35,7 @@ def get_runbook_service(es: EsDep, embed: EmbeddingDep) -> RunbookService:
         _runbook_service = RunbookService(es_service=es.es, embedding_service=embed)
     return _runbook_service
 
+
 InvDbDep = Annotated[InvestigationDatabaseManager, Depends(get_investigation_db)]
 RunbookDep = Annotated[RunbookService, Depends(get_runbook_service)]
 
@@ -49,7 +54,7 @@ def get_investigation_engine(
             llm_client=llm,
             fallback_engine=fallback,
             db_manager=inv_db,
-            es_service=es.es,
+            es_service=es,
             corr_db_manager=corr_db,
             runbook_service=runbooks,
         )
@@ -69,12 +74,15 @@ async def close_investigation_services() -> None:
     _runbook_service = None
 
 
-InvestigationEngineDep = Annotated[InvestigationEngine, Depends(get_investigation_engine)]
+InvestigationEngineDep = Annotated[
+    InvestigationEngine, Depends(get_investigation_engine)
+]
 
 router = APIRouter(tags=["AI Investigation"])
 
 
 # --- Schemas ---
+
 
 class IngestRunbookRequest(BaseModel):
     service: str
@@ -93,19 +101,18 @@ class InvestigationStepsResponseData(BaseModel):
 
 # --- Endpoints ---
 
+
 @router.post("/api/v1/investigations/{incident_id}/start")
 async def start_investigation(
     incident_id: str,
     x_tenant_id: TenantIdHeader,
     _api_key: ApiKeyDep,
-    corr_db: CorrDbDep,
     engine: InvestigationEngineDep,
 ) -> ApiResponse[InvestigationReport]:
-    incident = await corr_db.get_incident(incident_id)
-    if incident is None or incident.tenant_id != x_tenant_id:
-        raise HTTPException(status_code=404, detail=f"Incident '{incident_id}' not found")
-
-    report = await engine.investigate_incident(incident)
+    try:
+        report = await engine.investigate_by_id(incident_id)
+    except IncidentNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     return ApiResponse[InvestigationReport].ok(report)
 
 
@@ -114,13 +121,8 @@ async def get_investigation_report(
     incident_id: str,
     x_tenant_id: TenantIdHeader,
     _api_key: ApiKeyDep,
-    corr_db: CorrDbDep,
     inv_db: InvDbDep,
 ) -> ApiResponse[InvestigationReport]:
-    incident = await corr_db.get_incident(incident_id)
-    if incident is None or incident.tenant_id != x_tenant_id:
-        raise HTTPException(status_code=404, detail=f"Incident '{incident_id}' not found")
-
     report = await inv_db.get_report_by_incident(incident_id)
     if report is None:
         raise HTTPException(status_code=404, detail="Investigation report not found")
@@ -132,17 +134,11 @@ async def get_investigation_steps(
     incident_id: str,
     x_tenant_id: TenantIdHeader,
     _api_key: ApiKeyDep,
-    corr_db: CorrDbDep,
     inv_db: InvDbDep,
 ) -> ApiResponse[InvestigationStepsResponseData]:
-    incident = await corr_db.get_incident(incident_id)
-    if incident is None or incident.tenant_id != x_tenant_id:
-        raise HTTPException(status_code=404, detail=f"Incident '{incident_id}' not found")
-
     report = await inv_db.get_report_by_incident(incident_id)
     if report is None:
         raise HTTPException(status_code=404, detail="Investigation report not found")
-
     return ApiResponse[InvestigationStepsResponseData].ok(
         InvestigationStepsResponseData(
             investigation_id=report.investigation_id, steps=report.steps
@@ -155,14 +151,12 @@ async def retry_investigation(
     incident_id: str,
     x_tenant_id: TenantIdHeader,
     _api_key: ApiKeyDep,
-    corr_db: CorrDbDep,
     engine: InvestigationEngineDep,
 ) -> ApiResponse[InvestigationReport]:
     return await start_investigation(
         incident_id=incident_id,
         x_tenant_id=x_tenant_id,
         _api_key=_api_key,
-        corr_db=corr_db,
         engine=engine,
     )
 

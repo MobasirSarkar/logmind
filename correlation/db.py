@@ -1,77 +1,31 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import JSON, ForeignKey, String, Text, select
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import select
 
-from app.db import Base, Datastore, get_datastore
+from app.db import Datastore, get_datastore
 from correlation.models import (
     DependencyType,
     EventType,
     Incident,
     IncidentEvent,
+    IncidentEventORM,
+    IncidentORM,
     IncidentSeverity,
     IncidentStatus,
     ServiceDependency,
+    ServiceDependencyORM,
+    ServiceORM,
 )
 
-
-class ServiceORM(Base):
-    __tablename__ = "services"
-
-    id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    name: Mapped[str] = mapped_column(String(128), nullable=False)
-    environment: Mapped[str] = mapped_column(String(64), default="production")
-    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))
+__all__ = [
+    "DatabaseManager",
+    "IncidentEventORM",
+    "IncidentORM",
+    "ServiceDependencyORM",
+    "ServiceORM",
+]
 
 
-class ServiceDependencyORM(Base):
-    __tablename__ = "service_dependencies"
-
-    id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    source_service: Mapped[str] = mapped_column(String(128), nullable=False)
-    target_service: Mapped[str] = mapped_column(String(128), nullable=False)
-    dependency_type: Mapped[str] = mapped_column(String(32), default=DependencyType.HTTP.value)
-    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))
-
-
-class IncidentORM(Base):
-    __tablename__ = "incidents"
-
-    id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    title: Mapped[str] = mapped_column(String(255), nullable=False)
-    severity: Mapped[str] = mapped_column(String(32), nullable=False)
-    status: Mapped[str] = mapped_column(String(32), default=IncidentStatus.DETECTED.value, index=True)
-    started_at: Mapped[datetime] = mapped_column(nullable=False)
-    resolved_at: Mapped[datetime | None] = mapped_column(nullable=True)
-    trigger_service: Mapped[str] = mapped_column(String(128), nullable=False)
-    trigger_signature: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    affected_services: Mapped[list[str]] = mapped_column(JSON, default=list)
-    metadata_json: Mapped[dict[str, object]] = mapped_column(JSON, default=dict)
-    events: Mapped[list["IncidentEventORM"]] = relationship(
-        back_populates="incident",
-        cascade="all, delete-orphan",
-        order_by="IncidentEventORM.timestamp",
-        lazy="selectin",
-    )
-
-
-class IncidentEventORM(Base):
-    __tablename__ = "incident_events"
-
-    id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    incident_id: Mapped[str] = mapped_column(ForeignKey("incidents.id", ondelete="CASCADE"), nullable=False, index=True)
-    timestamp: Mapped[datetime] = mapped_column(nullable=False, index=True)
-    service: Mapped[str] = mapped_column(String(128), nullable=False)
-    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
-    error_signature: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    log_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    message: Mapped[str] = mapped_column(Text, nullable=False)
-
-    incident: Mapped[IncidentORM] = relationship(back_populates="events")
 class DatabaseManager:
     def __init__(
         self, database_url: str | None = None, datastore: Datastore | None = None
@@ -90,6 +44,7 @@ class DatabaseManager:
 
     async def close(self) -> None:
         await self.datastore.close()
+
     async def save_dependency(self, dep: ServiceDependency) -> ServiceDependency:
         async with self.session_factory() as session:
             stmt = select(ServiceDependencyORM).where(
@@ -115,7 +70,9 @@ class DatabaseManager:
 
     async def get_dependencies(self, tenant_id: str) -> list[ServiceDependency]:
         async with self.session_factory() as session:
-            stmt = select(ServiceDependencyORM).where(ServiceDependencyORM.tenant_id == tenant_id)
+            stmt = select(ServiceDependencyORM).where(
+                ServiceDependencyORM.tenant_id == tenant_id
+            )
             result = await session.execute(stmt)
             rows = result.scalars().all()
             return [
