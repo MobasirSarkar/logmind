@@ -4,6 +4,8 @@ import time
 from datetime import UTC, datetime
 from typing import Any
 
+from app.services.elasticsearch import ElasticsearchService
+from correlation.db import DatabaseManager
 from correlation.models import Incident
 from investigation.client import (
     ChatMessage,
@@ -15,11 +17,13 @@ from investigation.fallback import DeterministicFallbackEngine
 from investigation.models import (
     EvidenceItem,
     EvidenceType,
+    IncidentNotFound,
     InvestigationReport,
     InvestigationStatus,
     InvestigationStep,
     ToolName,
 )
+from investigation.runbooks import RunbookService
 from investigation.tools import InvestigationToolbox
 
 logger = logging.getLogger("uvicorn.error")
@@ -56,10 +60,16 @@ class InvestigationEngine:
         llm_client: LLMProvider,
         fallback_engine: DeterministicFallbackEngine,
         db_manager: InvestigationDatabaseManager | None = None,
+        es_service: ElasticsearchService | None = None,
+        corr_db_manager: DatabaseManager | None = None,
+        runbook_service: RunbookService | None = None,
     ):
         self.llm = llm_client
         self.fallback = fallback_engine
         self.db = db_manager
+        self.es = es_service
+        self.corr_db = corr_db_manager
+        self.runbooks = runbook_service
 
     def _build_initial_messages(self, incident: Incident) -> list[ChatMessage]:
         timeline_str = "\n".join(
@@ -70,12 +80,12 @@ class InvestigationEngine:
 ID: {incident.incident_id}
 Title: {incident.title}
 Trigger Service: {incident.trigger_service}
-Trigger Signature: {incident.trigger_signature or 'N/A'}
-Affected Services: {', '.join(incident.affected_services)}
+Trigger Signature: {incident.trigger_signature or "N/A"}
+Affected Services: {", ".join(incident.affected_services)}
 Started At: {incident.started_at.isoformat()}
 
 CORRELATED TIMELINE EVENTS:
-{timeline_str or 'None recorded'}
+{timeline_str or "None recorded"}
 
 Investigate the incident now. Use available tools to identify the root cause and confirm evidence."""
 
@@ -123,7 +133,11 @@ Investigate the incident now. Use available tools to identify the root cause and
                             t_name = ToolName.SEARCH_LOGS
 
                         try:
-                            parsed_input = json.loads(call.function.arguments) if call.function.arguments else {}
+                            parsed_input = (
+                                json.loads(call.function.arguments)
+                                if call.function.arguments
+                                else {}
+                            )
                         except (json.JSONDecodeError, TypeError):
                             parsed_input = {}
 
@@ -131,7 +145,9 @@ Investigate the incident now. Use available tools to identify the root cause and
                             InvestigationStep(
                                 step_number=len(steps) + 1,
                                 tool_name=t_name,
-                                tool_input=parsed_input if isinstance(parsed_input, dict) else {},
+                                tool_input=parsed_input
+                                if isinstance(parsed_input, dict)
+                                else {},
                                 tool_output=output,
                                 duration_ms=duration_ms,
                             )
@@ -181,8 +197,14 @@ Investigate the incident now. Use available tools to identify the root cause and
             return report
 
         except Exception as exc:  # noqa: BLE001
-            logger.warning("Investigation error for incident %s: %s (falling back)", incident.incident_id, exc)
-            fallback_report = self.fallback.generate_report(incident, error_reason=str(exc))
+            logger.warning(
+                "Investigation error for incident %s: %s (falling back)",
+                incident.incident_id,
+                exc,
+            )
+            fallback_report = self.fallback.generate_report(
+                incident, error_reason=str(exc)
+            )
             fallback_report.steps = steps
             if self.db:
                 await self.db.save_report(fallback_report)
@@ -209,7 +231,9 @@ Investigate the incident now. Use available tools to identify the root cause and
                 raise TypeError("Expected JSON object")
 
             summary = str(parsed.get("summary", f"Investigation for {incident.title}"))
-            root_cause = str(parsed.get("suspected_root_cause", "Root cause identified."))
+            root_cause = str(
+                parsed.get("suspected_root_cause", "Root cause identified.")
+            )
             confidence = float(parsed.get("confidence_score", 0.85))
             actions = [str(a) for a in parsed.get("recommended_actions", [])]
 
@@ -224,7 +248,9 @@ Investigate the incident now. Use available tools to identify the root cause and
                         EvidenceItem(
                             evidence_type=ev_type,
                             reference_id=str(ev.get("reference_id", "ref-unknown")),
-                            service=str(ev.get("service")) if ev.get("service") else None,
+                            service=str(ev.get("service"))
+                            if ev.get("service")
+                            else None,
                             excerpt=str(ev.get("excerpt", "")),
                         )
                     )
@@ -264,10 +290,18 @@ Investigate the incident now. Use available tools to identify the root cause and
         self, incident: Incident, toolbox: InvestigationToolbox | None = None
     ) -> InvestigationReport:
         if toolbox is None:
-            # Construct default toolbox if not provided
             toolbox = InvestigationToolbox(
-                es_service=self.llm,  # fallback placeholder if not wired
-                db_manager=self.db,
+                es_service=self.es,
+                db_manager=self.corr_db,
                 tenant_id=incident.tenant_id,
+                runbook_service=self.runbooks,
             )
         return await self.run_investigation_loop(incident, toolbox=toolbox)
+
+    async def investigate_by_id(self, incident_id: str) -> InvestigationReport:
+        if self.corr_db is None:
+            raise IncidentNotFound(incident_id)
+        incident = await self.corr_db.get_incident(incident_id)
+        if incident is None:
+            raise IncidentNotFound(incident_id)
+        return await self.investigate_incident(incident)

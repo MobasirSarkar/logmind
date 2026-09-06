@@ -1,8 +1,12 @@
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum
 
 from pydantic import BaseModel, Field
+from sqlalchemy import JSON, DateTime, ForeignKey, String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.db import Base
 
 
 class IncidentSeverity(str, Enum):
@@ -75,3 +79,81 @@ class Incident(BaseModel):
     affected_services: list[str] = Field(default_factory=list)
     events: list[IncidentEvent] = Field(default_factory=list)
     metadata: dict[str, object] = Field(default_factory=dict)
+
+
+# --- SQLAlchemy ORM Models ---
+
+
+class ServiceORM(Base):
+    __tablename__ = "services"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    environment: Mapped[str] = mapped_column(String(64), default="production")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
+class ServiceDependencyORM(Base):
+    __tablename__ = "service_dependencies"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    source_service: Mapped[str] = mapped_column(String(128), nullable=False)
+    target_service: Mapped[str] = mapped_column(String(128), nullable=False)
+    dependency_type: Mapped[str] = mapped_column(
+        String(32), default=DependencyType.HTTP.value
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
+class IncidentORM(Base):
+    __tablename__ = "incidents"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    severity: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(32), default=IncidentStatus.DETECTED.value, index=True
+    )
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    trigger_service: Mapped[str] = mapped_column(String(128), nullable=False)
+    trigger_signature: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    affected_services: Mapped[list[str]] = mapped_column(JSON, default=list)
+    metadata_json: Mapped[dict[str, object]] = mapped_column(JSON, default=dict)
+    events: Mapped[list["IncidentEventORM"]] = relationship(
+        back_populates="incident",
+        cascade="all, delete-orphan",
+        order_by="IncidentEventORM.timestamp",
+        lazy="selectin",
+    )
+
+
+class IncidentEventORM(Base):
+    __tablename__ = "incident_events"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    incident_id: Mapped[str] = mapped_column(
+        ForeignKey("incidents.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    service: Mapped[str] = mapped_column(String(128), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    error_signature: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    log_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+
+    incident: Mapped[IncidentORM] = relationship(back_populates="events")

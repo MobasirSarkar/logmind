@@ -1,12 +1,16 @@
-from typing import Annotated
-
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from app.api.deps import ApiKeyDep, EsDep, TenantIdHeader
+from app.api.deps import ApiKeyDep, TenantIdHeader
 from app.models.response import ApiResponse
-from correlation.db import DatabaseManager
-from correlation.engine import CorrelationEngine
+from correlation.deps import (
+    CorrelationDep,
+    DbDep,
+    StatusQuery,
+    close_database_manager,
+    get_correlation_engine,
+    get_database_manager,
+)
 from correlation.models import (
     DependencyType,
     Incident,
@@ -14,42 +18,20 @@ from correlation.models import (
     ServiceDependency,
 )
 
-_db_manager: DatabaseManager | None = None
-_correlation_engine: CorrelationEngine | None = None
-
-
-def get_database_manager() -> DatabaseManager:
-    global _db_manager
-    if _db_manager is None:
-        _db_manager = DatabaseManager()
-    return _db_manager
-
-
-def get_correlation_engine(
-    es: EsDep,
-    db: Annotated[DatabaseManager, Depends(get_database_manager)],
-) -> CorrelationEngine:
-    global _correlation_engine
-    if _correlation_engine is None:
-        _correlation_engine = CorrelationEngine(es_service=es.es, db_manager=db)
-    return _correlation_engine
-
-
-async def close_database_manager() -> None:
-    global _db_manager, _correlation_engine
-    if _db_manager is not None:
-        await _db_manager.close()
-        _db_manager = None
-    _correlation_engine = None
-
-
-DbDep = Annotated[DatabaseManager, Depends(get_database_manager)]
-CorrelationDep = Annotated[CorrelationEngine, Depends(get_correlation_engine)]
-StatusQuery = Annotated[IncidentStatus | None, Query()]
+__all__ = [
+    "CorrelationDep",
+    "DbDep",
+    "StatusQuery",
+    "close_database_manager",
+    "get_correlation_engine",
+    "get_database_manager",
+    "router",
+]
 router = APIRouter(tags=["Correlation & Incidents"])
 
 
 # --- Request & Response Models ---
+
 
 class RegisterDependencyRequest(BaseModel):
     source_service: str
@@ -72,9 +54,11 @@ class UpdateStatusRequest(BaseModel):
 
 class EvaluateRequest(BaseModel):
     lookback_seconds: int = Field(default=60, ge=10, le=3600)
+    min_error_count: int | None = Field(default=1, ge=1, le=1000)
 
 
 # --- Topology Endpoints ---
+
 
 @router.get("/api/v1/topology")
 async def get_topology(
@@ -83,9 +67,7 @@ async def get_topology(
     db: DbDep,
 ) -> ApiResponse[TopologyResponseData]:
     deps = await db.get_dependencies(x_tenant_id)
-    return ApiResponse[TopologyResponseData].ok(
-        TopologyResponseData(dependencies=deps)
-    )
+    return ApiResponse[TopologyResponseData].ok(TopologyResponseData(dependencies=deps))
 
 
 @router.post("/api/v1/topology/dependencies")
@@ -106,6 +88,7 @@ async def register_dependency(
 
 
 # --- Incident Endpoints ---
+
 
 @router.get("/api/v1/incidents")
 async def list_incidents(
@@ -141,7 +124,9 @@ async def evaluate_incidents(
     engine: CorrelationDep,
 ) -> ApiResponse[IncidentListResponseData]:
     incidents = await engine.evaluate_tenant(
-        tenant_id=x_tenant_id, lookback_seconds=req.lookback_seconds
+        tenant_id=x_tenant_id,
+        lookback_seconds=req.lookback_seconds,
+        min_error_count=req.min_error_count,
     )
     return ApiResponse[IncidentListResponseData].ok(
         IncidentListResponseData(items=incidents, count=len(incidents))

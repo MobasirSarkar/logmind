@@ -3,64 +3,51 @@ import json
 import logging
 from typing import Any, cast
 
-from pydantic import BaseModel, Field
-
 from app.constants import ESIndexPrefix
+from app.services.elasticsearch import ElasticsearchService
 from investigation.client import ToolDefinition, ToolFunctionSpec
+from investigation.models import (
+    GetRelatedIncidentsArgs,
+    GetRelatedIncidentsResult,
+    GetServiceDependenciesArgs,
+    GetServiceDependenciesResult,
+    GetTraceArgs,
+    GetTraceResult,
+    SearchLogsArgs,
+    SearchLogsResult,
+    SearchRunbooksArgs,
+    SearchRunbooksResult,
+    ToolName,
+)
+from investigation.runbooks import RunbookStore
 
 logger = logging.getLogger("uvicorn.error")
 
-
-# --- Typed Input & Output Models for All Tools ---
-
-class SearchLogsArgs(BaseModel):
-    query: str
-    service: str | None = None
-    limit: int = Field(default=10, ge=1, le=50)
-
-
-class SearchLogsResult(BaseModel):
-    count: int
-    logs: list[dict[str, object]] = Field(default_factory=list)
-
-
-class GetTraceArgs(BaseModel):
-    trace_id: str
-
-
-class GetTraceResult(BaseModel):
-    trace_id: str
-    spans: list[dict[str, object]] = Field(default_factory=list)
-
-
-class SearchRunbooksArgs(BaseModel):
-    query: str
-    service: str | None = None
-
-
-class SearchRunbooksResult(BaseModel):
-    runbooks: list[dict[str, object]] = Field(default_factory=list)
-
-
-class GetRelatedIncidentsArgs(BaseModel):
-    signature_hash: str
-
-
-class GetRelatedIncidentsResult(BaseModel):
-    incidents: list[dict[str, object]] = Field(default_factory=list)
-
-
-class GetServiceDependenciesArgs(BaseModel):
-    service: str
-
-
-class GetServiceDependenciesResult(BaseModel):
-    service: str
-    upstream_callers: list[str] = Field(default_factory=list)
-    downstream_dependencies: list[str] = Field(default_factory=list)
+__all__ = [
+    "GetRelatedIncidentsArgs",
+    "GetRelatedIncidentsResult",
+    "GetServiceDependenciesArgs",
+    "GetServiceDependenciesResult",
+    "GetTraceArgs",
+    "GetTraceResult",
+    "InvestigationToolbox",
+    "SearchLogsArgs",
+    "SearchLogsResult",
+    "SearchRunbooksArgs",
+    "SearchRunbooksResult",
+]
 
 
 # --- Toolbox Implementation ---
+
+
+def _extract_es_dict(res: Any) -> dict[str, Any]:
+    if hasattr(res, "body") and isinstance(res.body, dict):
+        return res.body
+    if isinstance(res, dict):
+        return res
+    return {}
+
 
 class InvestigationToolbox:
     def __init__(
@@ -68,10 +55,13 @@ class InvestigationToolbox:
         es_service: Any,
         db_manager: Any,
         tenant_id: str,
-        runbook_service: Any | None = None,
+        runbook_service: RunbookStore | None = None,
         timeout: float = 5.0,
     ):
-        self.es = es_service
+        if isinstance(es_service, ElasticsearchService):
+            self.es = es_service.es
+        else:
+            self.es = es_service
         self.db = db_manager
         self.tenant_id = tenant_id
         self.runbooks = runbook_service
@@ -82,74 +72,41 @@ class InvestigationToolbox:
             ToolDefinition(
                 type="function",
                 function=ToolFunctionSpec(
-                    name="search_logs",
+                    name=ToolName.SEARCH_LOGS.value,
                     description="Search logs in Elasticsearch using keywords, service filter, and time window.",
-                    parameters={
-                        "type": "object",
-                        "properties": {
-                            "query": {"type": "string", "description": "Search query or error message"},
-                            "service": {"type": "string", "description": "Optional service name to filter by"},
-                            "limit": {"type": "integer", "description": "Maximum number of logs (1-50)", "default": 10},
-                        },
-                        "required": ["query"],
-                    },
+                    parameters=SearchLogsArgs.model_json_schema(),
                 ),
             ),
             ToolDefinition(
                 type="function",
                 function=ToolFunctionSpec(
-                    name="get_trace",
+                    name=ToolName.GET_TRACE.value,
                     description="Retrieve the complete span execution tree for a distributed trace.",
-                    parameters={
-                        "type": "object",
-                        "properties": {
-                            "trace_id": {"type": "string", "description": "Trace UUID"},
-                        },
-                        "required": ["trace_id"],
-                    },
+                    parameters=GetTraceArgs.model_json_schema(),
                 ),
             ),
             ToolDefinition(
                 type="function",
                 function=ToolFunctionSpec(
-                    name="search_runbooks",
+                    name=ToolName.SEARCH_RUNBOOKS.value,
                     description="Search operational runbooks and troubleshooting guides by semantic query.",
-                    parameters={
-                        "type": "object",
-                        "properties": {
-                            "query": {"type": "string", "description": "Error or symptom to look up"},
-                            "service": {"type": "string", "description": "Optional service name"},
-                        },
-                        "required": ["query"],
-                    },
+                    parameters=SearchRunbooksArgs.model_json_schema(),
                 ),
             ),
             ToolDefinition(
                 type="function",
                 function=ToolFunctionSpec(
-                    name="get_related_incidents",
+                    name=ToolName.GET_RELATED_INCIDENTS.value,
                     description="Retrieve historical resolved incidents that share the same error signature hash.",
-                    parameters={
-                        "type": "object",
-                        "properties": {
-                            "signature_hash": {"type": "string", "description": "Error signature hash"},
-                        },
-                        "required": ["signature_hash"],
-                    },
+                    parameters=GetRelatedIncidentsArgs.model_json_schema(),
                 ),
             ),
             ToolDefinition(
                 type="function",
                 function=ToolFunctionSpec(
-                    name="get_service_dependencies",
+                    name=ToolName.GET_SERVICE_DEPENDENCIES.value,
                     description="Query service topology to find upstream callers and downstream dependencies.",
-                    parameters={
-                        "type": "object",
-                        "properties": {
-                            "service": {"type": "string", "description": "Service name"},
-                        },
-                        "required": ["service"],
-                    },
+                    parameters=GetServiceDependenciesArgs.model_json_schema(),
                 ),
             ),
         ]
@@ -157,7 +114,16 @@ class InvestigationToolbox:
     async def search_logs(self, args: SearchLogsArgs) -> SearchLogsResult:
         index = ESIndexPrefix.LOGS.for_tenant(self.tenant_id)
         must_clauses: list[dict[str, object]] = [
-            {"multi_match": {"query": args.query, "fields": ["message^3", "error.error_message^3", "error.error_type^2"]}}
+            {
+                "multi_match": {
+                    "query": args.query,
+                    "fields": [
+                        "message^3",
+                        "error.error_message^3",
+                        "error.error_type^2",
+                    ],
+                }
+            }
         ]
         if args.service:
             must_clauses.append({"term": {"context.service": args.service}})
@@ -171,8 +137,13 @@ class InvestigationToolbox:
             logger.warning("search_logs error: %s", exc)
             return SearchLogsResult(count=0, logs=[])
 
-        hits = res.get("hits", {}).get("hits", []) if isinstance(res, dict) else []
-        logs = [cast(dict[str, object], h.get("_source", {})) for h in hits if isinstance(h, dict)]
+        data = _extract_es_dict(res)
+        hits = data.get("hits", {}).get("hits", [])
+        logs = [
+            cast(dict[str, object], h.get("_source", {}))
+            for h in hits
+            if isinstance(h, dict)
+        ]
         return SearchLogsResult(count=len(logs), logs=logs)
 
     async def get_trace(self, args: GetTraceArgs) -> GetTraceResult:
@@ -190,8 +161,13 @@ class InvestigationToolbox:
             logger.warning("get_trace error: %s", exc)
             return GetTraceResult(trace_id=args.trace_id, spans=[])
 
-        hits = res.get("hits", {}).get("hits", []) if isinstance(res, dict) else []
-        spans = [cast(dict[str, object], h.get("_source", {})) for h in hits if isinstance(h, dict)]
+        data = _extract_es_dict(res)
+        hits = data.get("hits", {}).get("hits", [])
+        spans = [
+            cast(dict[str, object], h.get("_source", {}))
+            for h in hits
+            if isinstance(h, dict)
+        ]
         return GetTraceResult(trace_id=args.trace_id, spans=spans)
 
     async def search_runbooks(self, args: SearchRunbooksArgs) -> SearchRunbooksResult:
@@ -200,14 +176,16 @@ class InvestigationToolbox:
         try:
             async with asyncio.timeout(self.timeout):
                 results = await self.runbooks.search_runbooks(
-                    query=args.query, service=args.service
+                    tenant_id=self.tenant_id, query=args.query, service=args.service
                 )
                 return SearchRunbooksResult(runbooks=results)
         except Exception as exc:  # noqa: BLE001
             logger.warning("search_runbooks error: %s", exc)
             return SearchRunbooksResult(runbooks=[])
 
-    async def get_related_incidents(self, args: GetRelatedIncidentsArgs) -> GetRelatedIncidentsResult:
+    async def get_related_incidents(
+        self, args: GetRelatedIncidentsArgs
+    ) -> GetRelatedIncidentsResult:
         try:
             async with asyncio.timeout(self.timeout):
                 # Search database for incidents with matching trigger_signature
@@ -223,17 +201,25 @@ class InvestigationToolbox:
                     for inc in incidents
                     if inc.trigger_signature == args.signature_hash
                 ]
-                return GetRelatedIncidentsResult(incidents=cast(list[dict[str, object]], matched))
+                return GetRelatedIncidentsResult(
+                    incidents=cast(list[dict[str, object]], matched)
+                )
         except Exception as exc:  # noqa: BLE001
             logger.warning("get_related_incidents error: %s", exc)
             return GetRelatedIncidentsResult(incidents=[])
 
-    async def get_service_dependencies(self, args: GetServiceDependenciesArgs) -> GetServiceDependenciesResult:
+    async def get_service_dependencies(
+        self, args: GetServiceDependenciesArgs
+    ) -> GetServiceDependenciesResult:
         try:
             async with asyncio.timeout(self.timeout):
                 deps = await self.db.get_dependencies(self.tenant_id)
-                downstream = [d.target_service for d in deps if d.source_service == args.service]
-                upstream = [d.source_service for d in deps if d.target_service == args.service]
+                downstream = [
+                    d.target_service for d in deps if d.source_service == args.service
+                ]
+                upstream = [
+                    d.source_service for d in deps if d.target_service == args.service
+                ]
                 return GetServiceDependenciesResult(
                     service=args.service,
                     upstream_callers=upstream,
@@ -247,26 +233,39 @@ class InvestigationToolbox:
                 downstream_dependencies=[],
             )
 
-    async def execute_tool_by_name(self, name: str, arguments_json: str) -> dict[str, object]:
+    async def execute_tool_by_name(
+        self, name: str, arguments_json: str
+    ) -> dict[str, object]:
         try:
             parsed_args = json.loads(arguments_json) if arguments_json else {}
         except (json.JSONDecodeError, TypeError):
             parsed_args = {}
 
-        if name == "search_logs":
+        try:
+            tool_name = ToolName(name)
+        except ValueError:
+            return {"error": f"Unknown tool '{name}'"}
+
+        if tool_name == ToolName.SEARCH_LOGS:
             res = await self.search_logs(SearchLogsArgs.model_validate(parsed_args))
             return res.model_dump()
-        if name == "get_trace":
+        if tool_name == ToolName.GET_TRACE:
             res = await self.get_trace(GetTraceArgs.model_validate(parsed_args))
             return res.model_dump()
-        if name == "search_runbooks":
-            res = await self.search_runbooks(SearchRunbooksArgs.model_validate(parsed_args))
+        if tool_name == ToolName.SEARCH_RUNBOOKS:
+            res = await self.search_runbooks(
+                SearchRunbooksArgs.model_validate(parsed_args)
+            )
             return res.model_dump()
-        if name == "get_related_incidents":
-            res = await self.get_related_incidents(GetRelatedIncidentsArgs.model_validate(parsed_args))
+        if tool_name == ToolName.GET_RELATED_INCIDENTS:
+            res = await self.get_related_incidents(
+                GetRelatedIncidentsArgs.model_validate(parsed_args)
+            )
             return res.model_dump()
-        if name == "get_service_dependencies":
-            res = await self.get_service_dependencies(GetServiceDependenciesArgs.model_validate(parsed_args))
+        if tool_name == ToolName.GET_SERVICE_DEPENDENCIES:
+            res = await self.get_service_dependencies(
+                GetServiceDependenciesArgs.model_validate(parsed_args)
+            )
             return res.model_dump()
 
         return {"error": f"Unknown tool '{name}'"}
