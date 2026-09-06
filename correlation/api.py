@@ -1,5 +1,5 @@
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel, Field, ValidationError
 
 from app.api.deps import ApiKeyDep, TenantIdHeader
 from app.models.response import ApiResponse
@@ -118,11 +118,20 @@ async def get_incident(
 
 @router.post("/api/v1/incidents/evaluate")
 async def evaluate_incidents(
-    req: EvaluateRequest,
     x_tenant_id: TenantIdHeader,
     _api_key: ApiKeyDep,
     engine: CorrelationDep,
+    request: Request,
 ) -> ApiResponse[IncidentListResponseData]:
+    raw = await request.body()
+    if raw.strip():
+        try:
+            req = EvaluateRequest.model_validate_json(raw)
+        except (ValidationError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+    else:
+        req = EvaluateRequest()
+
     incidents = await engine.evaluate_tenant(
         tenant_id=x_tenant_id,
         lookback_seconds=req.lookback_seconds,
